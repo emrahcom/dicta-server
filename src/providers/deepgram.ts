@@ -1,10 +1,7 @@
 // Deepgram live transcription.
 //
-// Protocol references, checked against the live API on 2026-10-24:
-// - https://developers.deepgram.com/reference/speech-to-text-api/listen-streaming
-// - https://developers.deepgram.com/docs/understand-endpointing-interim-results
-// - https://developers.deepgram.com/docs/finalize
-// - https://developers.deepgram.com/docs/audio-keep-alive
+// Protocol references: specs/architecture.md (Providers, deepgram). Checked
+// against the live API on 2026-10-24.
 //
 // Results come per segment: a segment grows in interim results and ends with
 // is_final. speech_final, or from_finalize after a Finalize, ends the
@@ -124,9 +121,6 @@ export function createDeepgram({
           );
         },
         close() {
-          if (state === "open") {
-            send({ type: "CloseStream" });
-          }
           state = "closed";
           stopTimers();
           ws.close();
@@ -220,13 +214,14 @@ export function createDeepgram({
     try {
       return await connect(events, lang);
     } catch (err) {
-      const code = lang?.split("-")[0];
       if (
         !(err instanceof RefusedError && err.status === 400) ||
-        lang === undefined ||
-        code === undefined ||
-        code === lang
+        lang === undefined
       ) {
+        throw err;
+      }
+      const code = lang.split("-")[0];
+      if (code === lang) {
         throw err;
       }
       events.onWarning(

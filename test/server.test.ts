@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { connect, type AddressInfo } from "node:net";
 import { once } from "node:events";
 import { test } from "node:test";
-import { SignJWT } from "jose";
+import { type JWTPayload, SignJWT } from "jose";
 import type {
   OpenStream,
   ProviderStream,
@@ -124,6 +124,23 @@ test("logs connected with the sub of the token", async (t) => {
     logged.mock.calls[0].arguments[0],
     `[${sessionId}] connected sub="user-1"`,
   );
+});
+
+test("does not log a sub that is not a string", async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+  const logged = t.mock.method(console, "log", () => {});
+
+  // jose types sub as a string, but accepts any JSON value at runtime.
+  const payload = { sub: { email: "a@example.com" } } as unknown as JWTPayload;
+  const token = await new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime("1h")
+    .sign(new TextEncoder().encode(SECRET));
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${token}`);
+  const { sessionId } = JSON.parse((await nextMessage(ws)).data);
+
+  assert.equal(logged.mock.calls[0].arguments[0], `[${sessionId}] connected`);
 });
 
 test("logs connected without sub when the token has none", async (t) => {

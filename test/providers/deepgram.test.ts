@@ -250,12 +250,14 @@ test("sends KeepAlive every 4 seconds", async (t) => {
   assert.deepEqual(await deepgram.next(), { type: "KeepAlive" });
 });
 
-test("sends CloseStream on close", async (t) => {
+test("closes the socket on close", async (t) => {
   const { deepgram, stream } = await open(t);
+  const { socket } = await deepgram.connection;
+  const closed = new Promise((resolve) => socket.once("close", resolve));
 
   stream.close();
 
-  assert.deepEqual(await deepgram.next(), { type: "CloseStream" });
+  await closed;
 });
 
 test("sends collected text as a final, then reports an unexpected close", async (t) => {

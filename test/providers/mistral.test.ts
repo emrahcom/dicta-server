@@ -89,7 +89,7 @@ test("fails the open on an error before session.created", async (t) => {
     error: { code: 1234, message: "bad model" },
   });
 
-  await assert.rejects(opening, /Mistral error: 1234 bad model/);
+  await assert.rejects(opening, /Mistral error: "1234 bad model"/);
 });
 
 test("fails the open when Mistral refuses the connection", async (t) => {
@@ -185,8 +185,17 @@ test("sends pending text as a final, then reports a Mistral error", async (t) =>
   });
   assert.equal(
     recorded.errors[0]?.message,
-    'Mistral error: 3804 {"detail":"idle"}',
+    'Mistral error: "3804 {\\"detail\\":\\"idle\\"}"',
   );
+});
+
+test("quotes the error description, so it cannot break a log line", async (t) => {
+  const { mistral, recorded } = await open(t);
+
+  await mistral.send({ type: "error", error: { message: "bad\nthing" } });
+  await settle();
+
+  assert.equal(recorded.errors[0]?.message, 'Mistral error: "bad\\nthing"');
 });
 
 test("sends pending text as a final, then reports an unexpected close", async (t) => {

@@ -1,17 +1,13 @@
 // Mistral realtime transcription (Voxtral).
 //
-// Protocol references:
-// - Docs (endpoint, audio format, events):
-//   https://docs.mistral.ai/studio/audio/speech_to_text/realtime_transcription.md
-// - Client messages (session.update, input_audio.append, input_audio.flush):
-//   src/mistralai/client/models/realtimetranscription*.py in
-//   https://github.com/mistralai/client-python
+// Protocol references: specs/architecture.md (Providers, mistral).
 //
 // Checked against the live API on 2026-10-24: session.created arrives right
 // after the connection opens, and text comes as transcription.text.delta
 // fragments with their leading spaces ("The", " Bir", "ch", ".").
 
 import WebSocket from "ws";
+import { quoteForLog } from "../logging.ts";
 import { parseMessage, unknownTypeWarning } from "./messages.ts";
 import type { OpenStream, ProviderStream } from "./provider.ts";
 
@@ -179,13 +175,18 @@ type MistralMessage = {
   error?: { code?: number | string; message?: unknown };
 };
 
-// error.message is a string or an object with details.
+// Mistral's own description of an error, quoted for the log. error.message is
+// a string or an object with details.
 function describeError(error: MistralMessage["error"]): string {
   const message =
     typeof error?.message === "string"
       ? error.message
-      : JSON.stringify(error?.message);
-  return error?.code === undefined ? message : `${error.code} ${message}`;
+      : error?.message === undefined
+        ? "no description"
+        : JSON.stringify(error.message);
+  return quoteForLog(
+    error?.code === undefined ? message : `${error.code} ${message}`,
+  );
 }
 
 // Mistral takes a two-letter language code; without one it detects the

@@ -227,7 +227,11 @@ async function checkToken(
       algorithms: ["HS256"],
       requiredClaims: ["exp"],
     });
-    return { ok: true, sub: payload.sub };
+    // jose does not check the type of sub; only a string is logged.
+    return {
+      ok: true,
+      sub: typeof payload.sub === "string" ? payload.sub : undefined,
+    };
   } catch (err) {
     return { ok: false, reason: rejectionReason(err) };
   }

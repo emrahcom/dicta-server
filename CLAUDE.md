@@ -27,8 +27,9 @@ Run them after every change.
 
 `npm run format` fixes formatting.
 
-Optional, against the real Mistral API: `npm run test:live` with
-`MISTRAL_API_KEY` set. Run it before a release or when Mistral may have changed.
+Optional, against the real provider APIs: `npm run test:live` with
+`MISTRAL_API_KEY` and `DEEPGRAM_API_KEY` set. A provider without its key is
+skipped. Run it before a release or when a provider may have changed.
 
 ## Commits
 

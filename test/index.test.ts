@@ -11,6 +11,7 @@ function startIndex(env: Record<string, string>) {
     ALLOW_UNAUTHENTICATED,
     PROVIDER,
     MISTRAL_API_KEY,
+    DEEPGRAM_API_KEY,
     ...rest
   } = process.env;
   return spawn("node", ["src/index.ts"], {
@@ -73,4 +74,12 @@ test("exits at startup with PROVIDER=mistral and no MISTRAL_API_KEY", async () =
     PROVIDER: "mistral",
   });
   assert.match(stderr, /MISTRAL_API_KEY is required when PROVIDER=mistral/);
+});
+
+test("exits at startup with PROVIDER=deepgram and no DEEPGRAM_API_KEY", async () => {
+  const stderr = await exitWithError({
+    JWT_SECRET: SECRET,
+    PROVIDER: "deepgram",
+  });
+  assert.match(stderr, /DEEPGRAM_API_KEY is required when PROVIDER=deepgram/);
 });

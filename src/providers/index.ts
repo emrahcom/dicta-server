@@ -1,3 +1,4 @@
+import { createDeepgram, DEEPGRAM_DEFAULT_MODEL } from "./deepgram.ts";
 import { createMistral, MISTRAL_DEFAULT_MODEL } from "./mistral.ts";
 import type { OpenStream } from "./provider.ts";
 import { openStubStream } from "./stub.ts";
@@ -13,6 +14,16 @@ const providers: Record<string, (env: NodeJS.ProcessEnv) => OpenStream> = {
     return createMistral({
       apiKey: env.MISTRAL_API_KEY,
       model: env.MISTRAL_MODEL || MISTRAL_DEFAULT_MODEL,
+    });
+  },
+  deepgram: (env) => {
+    if (!env.DEEPGRAM_API_KEY) {
+      throw new Error("DEEPGRAM_API_KEY is required when PROVIDER=deepgram");
+    }
+    return createDeepgram({
+      apiKey: env.DEEPGRAM_API_KEY,
+      model: env.DEEPGRAM_MODEL || DEEPGRAM_DEFAULT_MODEL,
+      mipOptIn: env.DEEPGRAM_MIP_OPT_IN === "true",
     });
   },
 };

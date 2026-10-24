@@ -19,7 +19,10 @@ Node.js (current LTS) and TypeScript (strict).
 
 ## Verification commands
 
-Not defined yet. Run them after every change.
+Run them after every change.
+
+- Type check: `npm run check`
+- Tests: `npm run test`
 
 ## Commits
 

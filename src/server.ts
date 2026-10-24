@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { once } from "node:events";
 import { createServer as createHttpServer, type Server } from "node:http";
+import type { Duplex } from "node:stream";
 import { errors, jwtVerify } from "jose";
 import { WebSocketServer, type WebSocket } from "ws";
 import { quoteForLog } from "./logging.ts";
@@ -51,14 +51,27 @@ export function createServer({
   }, HEARTBEAT_INTERVAL_MS);
 
   server.on("upgrade", (req, socket, head) => {
-    const url = new URL(req.url ?? "", "http://localhost");
+    // Node gives an upgrade socket no error listener, so an error on it, such
+    // as a reset by the client, would crash the process.
+    const onSocketError = () => socket.destroy();
+    socket.on("error", onSocketError);
+
+    let url: URL;
+    try {
+      url = new URL(req.url ?? "", "http://localhost");
+    } catch {
+      refuse(socket, "400 Bad Request");
+      return;
+    }
     if (url.pathname !== LISTEN_PATH) {
-      socket.end("HTTP/1.1 404 Not Found\r\n\r\n");
+      refuse(socket, "404 Not Found");
       return;
     }
     // The upgrade is accepted before the token check, so the client can read
     // the 4001 close code.
     wss.handleUpgrade(req, socket, head, (ws) => {
+      // From here on, ws handles errors on the socket.
+      socket.removeListener("error", onSocketError);
       const sessionId = randomUUID();
       const tag = `[${sessionId}]`;
       // Without a listener, a protocol error (for example a too large frame)
@@ -182,7 +195,11 @@ export function createServer({
   async function shutdown(): Promise<void> {
     clearInterval(heartbeat);
     server.close();
-    const closed = [...wss.clients].map((ws) => once(ws, "close"));
+    // Not events.once(): it rejects on an error event, which can come before
+    // close.
+    const closed = [...wss.clients].map(
+      (ws) => new Promise((resolve) => ws.once("close", resolve)),
+    );
     for (const ws of wss.clients) {
       ws.close(1001);
     }
@@ -232,4 +249,10 @@ function rejectionReason(err: unknown): string {
     return "missing exp";
   }
   return "invalid";
+}
+
+// Answers an upgrade request with an HTTP status and closes the socket. A plain
+// end() would leave it half open while the client keeps its side open.
+function refuse(socket: Duplex, status: string) {
+  socket.end(`HTTP/1.1 ${status}\r\n\r\n`, () => socket.destroy());
 }

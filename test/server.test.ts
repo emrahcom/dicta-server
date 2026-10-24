@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { connect, type AddressInfo } from "node:net";
+import { once } from "node:events";
 import { test } from "node:test";
 import { SignJWT } from "jose";
 import type {
@@ -547,6 +548,72 @@ test("closes with 1009 when a frame is larger than 64 KiB", async (t) => {
   ws.send(new Uint8Array(64 * 1024 + 1));
 
   assert.equal((await closed).code, 1009);
+});
+
+// Sends an upgrade request for `target` over a raw socket.
+function rawUpgrade(base: string, target: string) {
+  const socket = connect(Number(new URL(base).port), "localhost");
+  socket.on("error", () => {});
+  socket.write(
+    `GET ${target} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\n` +
+      "Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+      "Sec-WebSocket-Version: 13\r\n\r\n",
+  );
+  return socket;
+}
+
+async function expectReady(base: string) {
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  assert.equal(JSON.parse((await nextMessage(ws)).data).type, "ready");
+  ws.close();
+}
+
+test("answers 400 to a URL it cannot parse and keeps serving", async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+
+  const socket = rawUpgrade(base, "http://[");
+  const [response] = (await once(socket, "data")) as [Buffer];
+
+  assert.match(response.toString(), /^HTTP\/1\.1 400 /);
+  await expectReady(base);
+});
+
+test("closes a refused socket even when the client keeps its side open", async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+
+  const socket = connect({
+    port: Number(new URL(base).port),
+    host: "localhost",
+    allowHalfOpen: true,
+  });
+  socket.on("error", () => {});
+  // A closed socket only shows when the client keeps writing to it.
+  socket.on("data", () => {
+    const writing = setInterval(() => socket.write("x"), 50);
+    socket.on("close", () => clearInterval(writing));
+  });
+  socket.write(
+    "GET /other HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\n" +
+      "Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+      "Sec-WebSocket-Version: 13\r\n\r\n",
+  );
+
+  // Not events.once(): the EPIPE error comes before close.
+  await new Promise((resolve) => socket.once("close", resolve));
+});
+
+test("keeps serving when a client resets the socket on another path", async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+
+  for (let i = 0; i < 20; i++) {
+    rawUpgrade(base, "/other").resetAndDestroy();
+  }
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  await expectReady(base);
 });
 
 test("rejects other paths", async (t) => {

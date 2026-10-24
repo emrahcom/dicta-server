@@ -120,7 +120,7 @@ test("logs connected with the sub of the token", async (t) => {
 
   assert.equal(
     logged.mock.calls[0].arguments[0],
-    `[${sessionId}] connected sub=user-1`,
+    `[${sessionId}] connected sub="user-1"`,
   );
 });
 

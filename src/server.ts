@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { errors, jwtVerify } from "jose";
 import { WebSocketServer, type WebSocket } from "ws";
+import { quoteForLog } from "./logging.ts";
 import type { OpenStream, ProviderStream } from "./providers/provider.ts";
 
 const LISTEN_PATH = "/dicta/v1/listen";
@@ -79,7 +80,9 @@ export function createServer({
     if (ws.readyState !== ws.OPEN) {
       return;
     }
-    console.log(`${tag} connected${sub === undefined ? "" : ` sub=${sub}`}`);
+    console.log(
+      `${tag} connected${sub === undefined ? "" : ` sub=${quoteForLog(sub)}`}`,
+    );
 
     // Details stay in the log; the client gets a generic message.
     const fail = (err: unknown) => {

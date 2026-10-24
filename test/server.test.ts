@@ -25,8 +25,13 @@ async function start(
   return { base: `ws://localhost:${port}`, shutdown };
 }
 
-function sign(options: { secret?: string; exp?: string | number | null } = {}): Promise<string> {
+function sign(
+  options: { secret?: string; exp?: string | number | null; sub?: string } = {},
+): Promise<string> {
   const jwt = new SignJWT({}).setProtectedHeader({ alg: 'HS256' });
+  if (options.sub !== undefined) {
+    jwt.setSubject(options.sub);
+  }
   const exp = options.exp === undefined ? '1h' : options.exp;
   if (exp !== null) {
     jwt.setExpirationTime(exp);
@@ -60,37 +65,53 @@ test('sends ready with a session id for a valid token', async (t) => {
   assert.notEqual(message.sessionId, '');
 });
 
-test('closes with 4001 when the token is missing', async (t) => {
+const rejections: { name: string; token: () => Promise<string | null>; reason: string }[] = [
+  { name: 'missing', token: async () => null, reason: 'missing' },
+  { name: 'signed with another secret', token: () => sign({ secret: 'other' }), reason: 'invalid signature' },
+  {
+    name: 'expired',
+    token: () => sign({ exp: Math.floor(Date.now() / 1000) - 60 }),
+    reason: 'expired',
+  },
+  { name: 'without exp', token: () => sign({ exp: null }), reason: 'missing exp' },
+  { name: 'malformed', token: async () => 'not-a-jwt', reason: 'invalid' },
+];
+
+for (const { name, token, reason } of rejections) {
+  test(`closes with 4001 and logs the reason when the token is ${name}`, async (t) => {
+    const { base, shutdown } = await start();
+    t.after(shutdown);
+    const warned = t.mock.method(console, 'warn', () => {});
+
+    const value = await token();
+    const query = value === null ? '' : `?token=${value}`;
+    const ws = new WebSocket(`${base}/dicta/v1/listen${query}`);
+
+    assert.equal(await closeCode(ws), 4001);
+    assert.match(warned.mock.calls[0].arguments[0], new RegExp(`^\\[[0-9a-f-]+\\] token rejected: ${reason}$`));
+  });
+}
+
+test('logs connected with the sub of the token', async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);
+  const logged = t.mock.method(console, 'log', () => {});
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen`);
-  assert.equal(await closeCode(ws), 4001);
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign({ sub: 'user-1' })}`);
+  const { sessionId } = JSON.parse((await nextMessage(ws)).data);
+
+  assert.equal(logged.mock.calls[0].arguments[0], `[${sessionId}] connected sub=user-1`);
 });
 
-test('closes with 4001 when the token is signed with another secret', async (t) => {
+test('logs connected without sub when the token has none', async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);
+  const logged = t.mock.method(console, 'log', () => {});
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign({ secret: 'other' })}`);
-  assert.equal(await closeCode(ws), 4001);
-});
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const { sessionId } = JSON.parse((await nextMessage(ws)).data);
 
-test('closes with 4001 when the token is expired', async (t) => {
-  const { base, shutdown } = await start();
-  t.after(shutdown);
-
-  const exp = Math.floor(Date.now() / 1000) - 60;
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign({ exp })}`);
-  assert.equal(await closeCode(ws), 4001);
-});
-
-test('closes with 4001 when the token has no exp', async (t) => {
-  const { base, shutdown } = await start();
-  t.after(shutdown);
-
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign({ exp: null })}`);
-  assert.equal(await closeCode(ws), 4001);
+  assert.equal(logged.mock.calls[0].arguments[0], `[${sessionId}] connected`);
 });
 
 test('sends ready without a token when unauthenticated is allowed', async (t) => {

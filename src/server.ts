@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer as createHttpServer, type Server } from 'node:http';
-import { jwtVerify } from 'jose';
+import { errors, jwtVerify } from 'jose';
 import { WebSocketServer } from 'ws';
 import type { OpenStream, ProviderStream } from './providers/provider.ts';
 
@@ -35,13 +35,20 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
       // Without a listener, a protocol error (for example a too large frame)
       // would crash the process. ws closes the connection itself.
       ws.on('error', (err) => console.warn(`${tag} connection error: ${err.message}`));
-      if (secret && !(await isValidToken(url.searchParams.get('token'), secret))) {
-        ws.close(4001);
-        return;
+      let sub: string | undefined;
+      if (secret) {
+        const check = await checkToken(url.searchParams.get('token'), secret);
+        if (!check.ok) {
+          console.warn(`${tag} token rejected: ${check.reason}`);
+          ws.close(4001);
+          return;
+        }
+        sub = check.sub;
       }
       if (ws.readyState !== ws.OPEN) {
         return;
       }
+      console.log(`${tag} connected${sub === undefined ? '' : ` sub=${sub}`}`);
 
       // Details stay in the log; the client gets a generic message.
       const fail = (err: unknown) => {
@@ -99,14 +106,37 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
   return { server, shutdown };
 }
 
-async function isValidToken(token: string | null, secret: Uint8Array): Promise<boolean> {
+type TokenCheck = { ok: true; sub?: string } | { ok: false; reason: string };
+
+async function checkToken(token: string | null, secret: Uint8Array): Promise<TokenCheck> {
   if (!token) {
-    return false;
+    return { ok: false, reason: 'missing' };
   }
   try {
-    await jwtVerify(token, secret, { algorithms: ['HS256'], requiredClaims: ['exp'] });
-    return true;
-  } catch {
-    return false;
+    const { payload } = await jwtVerify(token, secret, {
+      algorithms: ['HS256'],
+      requiredClaims: ['exp'],
+    });
+    return { ok: true, sub: payload.sub };
+  } catch (err) {
+    return { ok: false, reason: rejectionReason(err) };
   }
+}
+
+// Only fixed strings: nothing from an unverified token reaches the log.
+function rejectionReason(err: unknown): string {
+  if (err instanceof errors.JWTExpired) {
+    return 'expired';
+  }
+  if (err instanceof errors.JWSSignatureVerificationFailed) {
+    return 'invalid signature';
+  }
+  if (
+    err instanceof errors.JWTClaimValidationFailed &&
+    err.claim === 'exp' &&
+    err.reason === 'missing'
+  ) {
+    return 'missing exp';
+  }
+  return 'invalid';
 }

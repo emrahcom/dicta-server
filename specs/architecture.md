@@ -29,6 +29,10 @@ Message formats are in `contract-protocol.md`.
   call to another service.
 - The application's backend holds the signing key and issues the tokens. The
   key never reaches the browser.
+- HS256 with a shared secret (`JWT_SECRET`). The `jose` package verifies it.
+- `exp` is required. `sub` is optional and identifies the user.
+- The upgrade is accepted before the token is checked, so the client can read
+  the `4001` close code. `ready` is sent only after the token is accepted.
 
 ## Providers
 
@@ -52,3 +56,8 @@ sockets have not closed.
 Environment variables:
 
 - `PORT`: the port the server listens on. Default `8080`.
+- `JWT_SECRET`: the shared secret for tokens. Required; the server does not
+  start without it, unless `ALLOW_UNAUTHENTICATED` is `true`.
+- `ALLOW_UNAUTHENTICATED`: when `true`, tokens are not checked at all. For
+  development only. Default `false`. The server logs a warning at startup when
+  it is on.

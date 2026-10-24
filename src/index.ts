@@ -2,6 +2,8 @@ import { getProvider, providerNames } from "./providers/index.ts";
 import { createServer, type AuthOptions } from "./server.ts";
 
 const SHUTDOWN_TIMEOUT_MS = 5000;
+// RFC 7518: an HS256 key must be at least as long as the hash output.
+const MIN_SECRET_BYTES = 32;
 
 const port = Number(process.env.PORT ?? 8080);
 
@@ -9,11 +11,14 @@ let auth: AuthOptions;
 if (process.env.ALLOW_UNAUTHENTICATED === "true") {
   console.warn("WARNING: ALLOW_UNAUTHENTICATED is on, tokens are not checked");
   auth = { allowUnauthenticated: true };
-} else if (process.env.JWT_SECRET) {
-  auth = { jwtSecret: process.env.JWT_SECRET };
-} else {
+} else if (!process.env.JWT_SECRET) {
   console.error("JWT_SECRET is required unless ALLOW_UNAUTHENTICATED=true");
   process.exit(1);
+} else if (Buffer.byteLength(process.env.JWT_SECRET) < MIN_SECRET_BYTES) {
+  console.error(`JWT_SECRET must be at least ${MIN_SECRET_BYTES} bytes`);
+  process.exit(1);
+} else {
+  auth = { jwtSecret: process.env.JWT_SECRET };
 }
 
 const openStream = getProvider(process.env.PROVIDER);

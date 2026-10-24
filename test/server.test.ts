@@ -435,6 +435,22 @@ test("closes the provider stream when the connection closes", async (t) => {
   assert.equal(fake.closed, true);
 });
 
+test("closes the provider stream when the client leaves while it opens", async (t) => {
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const closed = new Promise((resolve) => (ws.onclose = resolve));
+  ws.close();
+  await closed;
+  fake.open();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.equal(fake.closed, true);
+});
+
 test("accepts a 64 KiB frame", async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);

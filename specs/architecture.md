@@ -30,8 +30,8 @@ Message formats are in `contract-protocol.md`.
 
 - JWT, verified locally with a key from the configuration. No database and no
   call to another service.
-- The application's backend holds the signing key and issues the tokens. The
-  key never reaches the browser.
+- The application's backend holds the signing key and issues the tokens. The key
+  never reaches the browser.
 - HS256 with a shared secret (`JWT_SECRET`). The `jose` package verifies it.
 - `exp` is required. `sub` is optional and identifies the user.
 - The upgrade is accepted before the token is checked, so the client can read
@@ -42,20 +42,18 @@ Message formats are in `contract-protocol.md`.
 - Each provider is an adapter behind one interface: open a stream, send audio,
   receive interim and final transcripts, close.
 - The provider and its API key come from the server configuration.
-- The provider stream is opened after the token is accepted and closed with
-  the connection. `ready` is sent only after it is open, so the server never
-  buffers audio.
-- A provider stream can fail while opening or later. Either way the server
-  logs the details, sends a generic `error` to the client and closes with
-  `1011`. Provider details never reach the client. Only that connection is
-  affected.
+- The provider stream is opened after the token is accepted and closed with the
+  connection. `ready` is sent only after it is open, so the server never buffers
+  audio.
+- A provider stream can fail while opening or later. Either way the server logs
+  the details, sends a generic `error` to the client and closes with `1011`.
+  Provider details never reach the client. Only that connection is affected.
 - A provider catches errors in its own event handlers and timers and reports
-  them through its error callback. It never lets them escape, because the
-  server cannot catch them there.
-- `stub` is a provider for development and tests. It needs no API key and
-  calls no service. For each audio frame it sends an interim with the total
-  bytes received so far, and after 1 second without audio a final with the
-  same text.
+  them through its error callback. It never lets them escape, because the server
+  cannot catch them there.
+- `stub` is a provider for development and tests. It needs no API key and calls
+  no service. For each audio frame it sends an interim with the total bytes
+  received so far, and after 1 second without audio a final with the same text.
 - `mistral` uses Mistral's realtime transcription API (Voxtral) over a
   WebSocket. Audio is forwarded as it is, since Mistral accepts the same PCM
   format. Each text delta is sent as an interim with the text since the last
@@ -88,20 +86,20 @@ when it closes. Any instance can serve any user.
 - The session id is created when a connection starts. Every log line about a
   connection starts with it: `[<sessionId>] <message>`.
 - A rejected token is logged with the reason (missing, expired, invalid
-  signature, missing `exp`, or invalid for anything else). Neither the token
-  nor anything decoded from it is logged.
+  signature, missing `exp`, or invalid for anything else). Neither the token nor
+  anything decoded from it is logged.
 - An accepted connection is logged once as `connected`, with the token's `sub`
   when it has one. No other claim is logged.
 - `sub` is logged in double quotes, escaped like a JSON string, with invisible
-  and control characters as `\uXXXX`, so it cannot break or disguise a log
-  line. It is cut to 128 characters, followed by `...` when longer:
+  and control characters as `\uXXXX`, so it cannot break or disguise a log line.
+  It is cut to 128 characters, followed by `...` when longer:
   `connected sub="user-1"`.
 
 ## Shutdown
 
-On `SIGTERM` or `SIGINT` the server stops accepting connections, closes the
-open ones with code `1001` and exits. It exits after 5 seconds even if some
-sockets have not closed.
+On `SIGTERM` or `SIGINT` the server stops accepting connections, closes the open
+ones with code `1001` and exits. It exits after 5 seconds even if some sockets
+have not closed.
 
 ## Configuration
 

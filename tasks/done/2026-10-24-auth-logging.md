@@ -1,7 +1,6 @@
 # Auth logging
 
-Log token rejections and accepted connections, per `architecture.md`
-(Logging).
+Log token rejections and accepted connections, per `architecture.md` (Logging).
 
 - A rejected token: log `token rejected: <reason>`. Reasons: missing, expired,
   invalid signature, missing `exp`, and a generic one for anything else.

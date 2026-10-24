@@ -20,8 +20,8 @@ dicta-server is the server side. It receives a user's microphone audio from
 - Not a voice assistant or chat bot. It does not talk back.
 - Not a media server. No WebRTC, no rooms, no multi-party calls.
 - Not a speech-to-text engine. It uses providers, it does not run models.
-- Not a general-purpose transcription service. Using it for plain
-  speech-to-text works, but features are driven by voice control.
+- Not a general-purpose transcription service. Using it for plain speech-to-text
+  works, but features are driven by voice control.
 
 ## First version
 

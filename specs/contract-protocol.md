@@ -23,9 +23,8 @@ The client streams audio in small frames while the user speaks, typically every
 20 to 100 ms. It sends audio only while it captures speech, for example while
 push-to-talk is held, and stops when the user stops speaking. The server sends
 the final transcript about 1 second after the audio stops. A single frame is at
-most 64 KiB; a larger one closes the connection with code `1009`. Audio
-buffered before `ready` is sent in the same small frames, never merged into
-one.
+most 64 KiB; a larger one closes the connection with code `1009`. Audio buffered
+before `ready` is sent in the same small frames, never merged into one.
 
 ## Server to client
 
@@ -66,5 +65,5 @@ WebSocket libraries answer pings automatically.
 Code `1011` from the server means a server-side failure. It may come without an
 `error` message.
 
-Code `1001` from the server means it is shutting down. The client may open a
-new connection, which reaches another instance.
+Code `1001` from the server means it is shutting down. The client may open a new
+connection, which reaches another instance.

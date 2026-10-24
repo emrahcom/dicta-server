@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { AddressInfo } from "node:net";
+import { connect, type AddressInfo } from "node:net";
 import { test } from "node:test";
 import { SignJWT } from "jose";
 import type {
@@ -474,6 +474,56 @@ test("rejects other paths", async (t) => {
     ws.onerror = () => resolve();
     ws.onopen = () => reject(new Error("connection was accepted"));
   });
+});
+
+test("keeps a connection that answers pings", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ready = nextMessage(ws);
+  fake.open();
+  await ready;
+  for (let i = 0; i < 3; i++) {
+    t.mock.timers.tick(30_000);
+    // Real time for the pong to come back.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  assert.equal(ws.readyState, WebSocket.OPEN);
+  assert.equal(fake.closed, false);
+});
+
+test("terminates a connection that does not answer pings", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+  fake.open();
+
+  // A raw socket completes the upgrade but never answers a ping.
+  const { port } = new URL(base);
+  const socket = connect(Number(port), "localhost");
+  socket.write(
+    `GET /dicta/v1/listen?token=${await sign()} HTTP/1.1\r\n` +
+      "Host: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+      "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+      "Sec-WebSocket-Version: 13\r\n\r\n",
+  );
+  const closed = new Promise((resolve) => socket.on("close", resolve));
+  socket.on("data", () => {});
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  t.mock.timers.tick(30_000);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(socket.destroyed, false);
+
+  t.mock.timers.tick(30_000);
+  await closed;
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(fake.closed, true);
 });
 
 test("shutdown closes open connections with 1001", async () => {

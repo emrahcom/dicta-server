@@ -8,6 +8,7 @@ import type { OpenStream, ProviderStream } from "./providers/provider.ts";
 
 const LISTEN_PATH = "/dicta/v1/listen";
 const MAX_FRAME_BYTES = 64 * 1024;
+const HEARTBEAT_INTERVAL_MS = 30_000;
 const PROVIDER_ERROR_MESSAGE = "speech-to-text provider failed";
 
 export type AuthOptions =
@@ -33,6 +34,20 @@ export function createServer({
     maxPayload: MAX_FRAME_BYTES,
   });
 
+  // A connection that did not answer the previous ping is terminated, which
+  // also closes its provider stream.
+  const answered = new WeakSet<WebSocket>();
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (!answered.has(ws)) {
+        ws.terminate();
+        continue;
+      }
+      answered.delete(ws);
+      ws.ping();
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+
   server.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "", "http://localhost");
     if (url.pathname !== LISTEN_PATH) {
@@ -49,6 +64,8 @@ export function createServer({
       ws.on("error", (err) =>
         console.warn(`${tag} connection error: ${err.message}`),
       );
+      answered.add(ws);
+      ws.on("pong", () => answered.add(ws));
       const unexpected = (err: unknown) => {
         console.error(`${tag} unexpected error: ${errorMessage(err)}`);
         if (ws.readyState === ws.OPEN) {
@@ -149,6 +166,7 @@ export function createServer({
   // Stops accepting connections, closes the open ones with 1001 and resolves
   // when all of them are closed.
   async function shutdown(): Promise<void> {
+    clearInterval(heartbeat);
     server.close();
     const closed = [...wss.clients].map((ws) => once(ws, "close"));
     for (const ws of wss.clients) {

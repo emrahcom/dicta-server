@@ -4,9 +4,10 @@ Add the `mistral` provider, per `architecture.md` (Providers, Configuration) and
 `contract-protocol.md` (Client to server).
 
 - Connect to Mistral's realtime endpoint with `MISTRAL_MODEL` and the API key in
-  an `Authorization` header. Then send `session.update` for 16 kHz `pcm_s16le`
-  audio.
-- A connection that does not open within 10 seconds fails the open.
+  an `Authorization` header.
+- On `session.created`, send `session.update` for 16 kHz `pcm_s16le` audio. The
+  stream is then open. An `error` before it, or no `session.created` within 10
+  seconds of connecting, fails the open.
 - Send each audio frame as `input_audio.append`.
 - Each `transcription.text.delta`: an interim with the text since the last
   final, or a final when that text ends a sentence.

@@ -46,6 +46,9 @@ Message formats are in `contract-protocol.md`.
   logs the details, sends a generic `error` to the client and closes with
   `1011`. Provider details never reach the client. Only that connection is
   affected.
+- A provider catches errors in its own event handlers and timers and reports
+  them through its error callback. It never lets them escape, because the
+  server cannot catch them there.
 - `stub` is a provider for development and tests. It needs no API key and
   calls no service. For each audio frame it sends an interim with the total
   bytes received so far, and after 1 second without audio a final with the
@@ -54,7 +57,9 @@ Message formats are in `contract-protocol.md`.
 ## Unexpected errors
 
 An unexpected error in a connection is logged and closes that connection with
-`1011`. The process keeps running.
+`1011`. The process keeps running. This covers the connection setup and every
+event handler of the connection, including the callbacks the server passes to
+the provider.
 
 ## State
 

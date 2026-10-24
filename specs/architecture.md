@@ -45,6 +45,10 @@ Message formats are in `contract-protocol.md`.
 - The provider stream is opened after the token is accepted and closed with the
   connection. `ready` is sent only after it is open, so the server never buffers
   audio.
+- The server passes the client's `lang` to the provider. A well-formed tag is a
+  language code of 2 or 3 letters, optionally followed by subtags of 1 to 8
+  letters or digits, each after a `-`. A malformed value is logged as a warning,
+  quoted like `sub`, and not passed on.
 - A provider stream can fail while opening or later. Either way the server logs
   the details, sends a generic `error` to the client and closes with `1011`.
   Provider details never reach the client. Only that connection is affected.
@@ -57,12 +61,14 @@ Message formats are in `contract-protocol.md`.
 - `mistral` uses Mistral's realtime transcription API (Voxtral) over a
   WebSocket. The stream is open when Mistral confirms the session with
   `session.created`, as Mistral's SDK does. Audio is forwarded as it is, since
-  Mistral accepts the same PCM format. Each text delta is sent as an interim
-  with the text since the last final. A final is sent when that text ends a
-  sentence, and after 1 second without audio frames, when the server asks
-  Mistral to flush. When Mistral fails, text not yet sent as a final is sent as
-  a final first. A message from Mistral that cannot be parsed, or has an unknown
-  type, is logged as a warning and skipped; the stream continues.
+  Mistral accepts the same PCM format. Mistral takes a two-letter language code:
+  the language code of the tag is sent when it has two letters (`de` for
+  `de-DE`), otherwise Mistral detects the language itself. Each text delta is
+  sent as an interim with the text since the last final. A final is sent when
+  that text ends a sentence, and after 1 second without audio frames, when the
+  server asks Mistral to flush. When Mistral fails, text not yet sent as a final
+  is sent as a final first. A message from Mistral that cannot be parsed, or has
+  an unknown type, is logged as a warning and skipped; the stream continues.
 - Mistral protocol references. The docs give the endpoint, audio format and
   events:
   https://docs.mistral.ai/studio/audio/speech_to_text/realtime_transcription.md
@@ -72,18 +78,20 @@ Message formats are in `contract-protocol.md`.
   https://github.com/mistralai/client-python.
 - `deepgram` uses Deepgram's live transcription API over a WebSocket, with smart
   formatting and an endpointing of 500 ms. The stream is open when the WebSocket
-  opens. Audio is forwarded as it is. The language is English. Deepgram sends
-  results per segment; finished segments are collected, and each result is sent
-  as an interim with the collected text and the current segment. A final is sent
-  when Deepgram marks the end of speech (`speech_final`) or answers a
-  `Finalize`, which the server sends after 1 second without audio frames. A
-  `KeepAlive` every 4 seconds keeps the stream open, since Deepgram closes it
-  after 10 seconds without audio. On close the server sends `CloseStream`. When
-  Deepgram fails, collected text is sent as a final first. Deepgram's `Error`
-  messages are not fatal and are logged as warnings; fatal problems close the
-  socket and count as a failure. Messages that cannot be parsed, or have an
-  unknown type, are handled as for Mistral. Requests opt out of Deepgram's Model
-  Improvement Program (`mip_opt_out`) unless `DEEPGRAM_MIP_OPT_IN` is `true`.
+  opens. Audio is forwarded as it is. The language tag is sent as it is, and
+  without one the language is English. A language Deepgram does not support
+  makes it refuse the connection, which fails the open. Deepgram sends results
+  per segment; finished segments are collected, and each result is sent as an
+  interim with the collected text and the current segment. A final is sent when
+  Deepgram marks the end of speech (`speech_final`) or answers a `Finalize`,
+  which the server sends after 1 second without audio frames. A `KeepAlive`
+  every 4 seconds keeps the stream open, since Deepgram closes it after 10
+  seconds without audio. On close the server sends `CloseStream`. When Deepgram
+  fails, collected text is sent as a final first. Deepgram's `Error` messages
+  are not fatal and are logged as warnings; fatal problems close the socket and
+  count as a failure. Messages that cannot be parsed, or have an unknown type,
+  are handled as for Mistral. Requests opt out of Deepgram's Model Improvement
+  Program (`mip_opt_out`) unless `DEEPGRAM_MIP_OPT_IN` is `true`.
 - Deepgram protocol references, checked on 2026-10-24:
   https://developers.deepgram.com/reference/speech-to-text-api/listen-streaming
   https://developers.deepgram.com/docs/understand-endpointing-interim-results

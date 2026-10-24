@@ -5,7 +5,7 @@ The contract between `dicta-js` and dicta-server. Both repos follow this file.
 ## Connection
 
 ```
-wss://<host>/dicta/v1/listen?token=<jwt>
+wss://<host>/dicta/v1/listen?token=<jwt>&lang=<tag>
 ```
 
 - All server paths start with `/dicta/`, so a reverse proxy can route them with
@@ -15,6 +15,9 @@ wss://<host>/dicta/v1/listen?token=<jwt>
   not log it.
 - A missing, invalid or expired token: the server closes the socket with code
   `4001`.
+- `lang` is optional: the language the user speaks, as a BCP 47 tag such as
+  `de`, `de-DE` or `en-US`. Without it, the server's provider uses its default.
+  A value that is not a well-formed tag is ignored, and the connection goes on.
 
 ## Client to server
 

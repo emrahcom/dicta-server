@@ -70,6 +70,25 @@ Message formats are in `contract-protocol.md`.
   `input_audio.flush`) are defined only in the SDK source,
   `src/mistralai/client/models/realtimetranscription*.py` in
   https://github.com/mistralai/client-python.
+- `deepgram` uses Deepgram's live transcription API over a WebSocket, with smart
+  formatting and an endpointing of 500 ms. The stream is open when the WebSocket
+  opens. Audio is forwarded as it is. The language is English. Deepgram sends
+  results per segment; finished segments are collected, and each result is sent
+  as an interim with the collected text and the current segment. A final is sent
+  when Deepgram marks the end of speech (`speech_final`) or answers a
+  `Finalize`, which the server sends after 1 second without audio frames. A
+  `KeepAlive` every 4 seconds keeps the stream open, since Deepgram closes it
+  after 10 seconds without audio. On close the server sends `CloseStream`. When
+  Deepgram fails, collected text is sent as a final first. Deepgram's `Error`
+  messages are not fatal and are logged as warnings; fatal problems close the
+  socket and count as a failure. Messages that cannot be parsed, or have an
+  unknown type, are handled as for Mistral. Requests opt out of Deepgram's Model
+  Improvement Program (`mip_opt_out`) unless `DEEPGRAM_MIP_OPT_IN` is `true`.
+- Deepgram protocol references, checked on 2026-10-24:
+  https://developers.deepgram.com/reference/speech-to-text-api/listen-streaming
+  https://developers.deepgram.com/docs/understand-endpointing-interim-results
+  https://developers.deepgram.com/docs/finalize
+  https://developers.deepgram.com/docs/audio-keep-alive
 
 ## Unexpected errors
 
@@ -87,7 +106,7 @@ when it closes. Any instance can serve any user.
 
 - Logs go to the console.
 - Audio and transcripts are never logged, and neither is the content of provider
-  messages.
+  messages, except a provider's own error description.
 - The session id is created when a connection starts. Every log line about a
   connection starts with it: `[<sessionId>] <message>`.
 - A rejected token is logged with the reason (missing, expired, invalid
@@ -118,7 +137,11 @@ Environment variables:
   development only. Default `false`. The server logs a warning at startup when
   it is on.
 - `PROVIDER`: the speech-to-text provider. Required; the server does not start
-  without a known one. Values: `stub`, `mistral`.
+  without a known one. Values: `stub`, `mistral`, `deepgram`.
 - `MISTRAL_API_KEY`: required when `PROVIDER` is `mistral`.
 - `MISTRAL_MODEL`: the Mistral model. Default
   `voxtral-mini-transcribe-realtime-3`.
+- `DEEPGRAM_API_KEY`: required when `PROVIDER` is `deepgram`.
+- `DEEPGRAM_MODEL`: the Deepgram model. Default `nova-3`.
+- `DEEPGRAM_MIP_OPT_IN`: `true` lets Deepgram use the audio for its Model
+  Improvement Program. Default `false`.

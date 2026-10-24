@@ -237,6 +237,10 @@ test("finalizes 1 second after the last audio", async (t) => {
   t.mock.timers.tick(999);
   stream.sendAudio(Buffer.from([2]));
   await deepgram.next();
+  // A Finalize sent too early would arrive before the next frame.
+  t.mock.timers.tick(999);
+  stream.sendAudio(Buffer.from([3]));
+  assert.deepEqual(await deepgram.next(), Buffer.from([3]));
   t.mock.timers.tick(1000);
 
   assert.deepEqual(await deepgram.next(), { type: "Finalize" });

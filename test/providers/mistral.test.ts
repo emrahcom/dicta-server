@@ -188,6 +188,13 @@ test("flushes 1 second after the last audio and sends the rest as a final", asyn
   t.mock.timers.tick(999);
   stream.sendAudio(Buffer.from([2]));
   await mistral.next(); // input_audio.append
+  // A flush sent too early would arrive before the next frame.
+  t.mock.timers.tick(999);
+  stream.sendAudio(Buffer.from([3]));
+  assert.deepEqual(await mistral.next(), {
+    type: "input_audio.append",
+    audio: Buffer.from([3]).toString("base64"),
+  });
   t.mock.timers.tick(1000);
 
   assert.deepEqual(await mistral.next(), { type: "input_audio.flush" });

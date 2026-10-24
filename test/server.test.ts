@@ -551,6 +551,9 @@ test("closes the provider stream when the client leaves while it opens", async (
   const closed = new Promise((resolve) => (ws.onclose = resolve));
   ws.close();
   await closed;
+  // Let the server finish closing too: only then does the check before ready,
+  // not the close listener, have to close the stream.
+  await new Promise((resolve) => setTimeout(resolve, 50));
   fake.open();
   await new Promise((resolve) => setTimeout(resolve, 50));
 

@@ -21,6 +21,8 @@ sufficient.
 - Keep the project as simple as possible. Avoid speculative complexity and "what
   if we need it later" features.
 - Specs in `specs/` are authoritative; code follows specs.
+- Specs are living documents. Write only what the next task needs and update
+  them whenever needed.
 - Atomic, reversible commits with verification at each step.
 - Prefer explicit over clever.
 - Push back on questionable suggestions; don't agree just to be agreeable.

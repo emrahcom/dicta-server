@@ -56,6 +56,12 @@ Message formats are in `contract-protocol.md`.
 Instances share nothing. All state belongs to an open connection and is gone
 when it closes. Any instance can serve any user.
 
+## Logging
+
+- Logs go to the console.
+- The session id is created when a connection starts. Every log line about a
+  connection starts with it: `[<sessionId>] <message>`.
+
 ## Shutdown
 
 On `SIGTERM` or `SIGINT` the server stops accepting connections, closes the

@@ -26,3 +26,7 @@ export type OpenStream = (
   events: StreamEvents,
   options: StreamOptions,
 ) => Promise<ProviderStream>;
+
+// More audio than this waiting in a provider socket means the provider does
+// not keep up, and the stream fails (architecture.md, Providers).
+export const MAX_PROVIDER_BUFFER_BYTES = 1024 * 1024;

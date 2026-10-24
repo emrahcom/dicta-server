@@ -11,7 +11,12 @@
 import WebSocket from "ws";
 import { quoteForLog } from "../logging.ts";
 import { parseMessage, unknownTypeWarning } from "./messages.ts";
-import type { OpenStream, ProviderStream, StreamEvents } from "./provider.ts";
+import {
+  MAX_PROVIDER_BUFFER_BYTES,
+  type OpenStream,
+  type ProviderStream,
+  type StreamEvents,
+} from "./provider.ts";
 
 export const DEEPGRAM_DEFAULT_MODEL = "nova-3";
 
@@ -111,6 +116,10 @@ export function createDeepgram({
       const stream: ProviderStream = {
         sendAudio(chunk) {
           if (state !== "open") {
+            return;
+          }
+          if (ws.bufferedAmount > MAX_PROVIDER_BUFFER_BYTES) {
+            fail(new Error("provider does not keep up"));
             return;
           }
           ws.send(chunk);

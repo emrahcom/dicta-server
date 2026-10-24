@@ -482,6 +482,26 @@ test("sends ready only after the provider stream is open", async (t) => {
   await nextMessage(ws);
 });
 
+test("does not forward text frames to the provider", async (t) => {
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ready = nextMessage(ws);
+  fake.open();
+  await ready;
+
+  ws.send("not audio");
+  ws.send(new Uint8Array([7]));
+  // The binary frame after the text frame shows the text frame was handled.
+  while (fake.chunks.length === 0) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  assert.deepEqual(Buffer.concat(fake.chunks), Buffer.from([7]));
+});
+
 test("forwards audio to the provider and transcripts to the client", async (t) => {
   const fake = fakeProvider();
   const { base, shutdown } = await start({ openStream: fake.openStream });

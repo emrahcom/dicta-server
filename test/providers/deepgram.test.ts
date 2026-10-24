@@ -8,6 +8,8 @@ import {
   events,
   type FakeServer,
   fakeServer,
+  pause,
+  sendUntilError,
   settle,
 } from "./helpers.ts";
 
@@ -181,6 +183,15 @@ test("fails the open when it does not open within 10 seconds", async (t) => {
   t.mock.timers.tick(10_000);
 
   await assert.rejects(opening, /not open within 10 seconds/);
+});
+
+test("fails the stream when the provider does not keep up", async (t) => {
+  const { deepgram, recorded, stream } = await open(t);
+  await pause(deepgram);
+
+  await sendUntilError(stream, recorded);
+
+  assert.match(recorded.errors[0]?.message ?? "", /does not keep up/);
 });
 
 test("sends audio as binary frames", async (t) => {

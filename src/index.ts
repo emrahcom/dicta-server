@@ -6,7 +6,7 @@ const SHUTDOWN_TIMEOUT_MS = 5000;
 // RFC 7518: an HS256 key must be at least as long as the hash output.
 const MIN_SECRET_BYTES = 32;
 
-const port = Number(process.env.PORT ?? 8080);
+const port = Number(process.env.PORT || 8080);
 
 let auth: AuthOptions;
 if (process.env.ALLOW_UNAUTHENTICATED === "true") {

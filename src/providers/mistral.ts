@@ -9,7 +9,11 @@
 import WebSocket from "ws";
 import { quoteForLog } from "../logging.ts";
 import { parseMessage, unknownTypeWarning } from "./messages.ts";
-import type { OpenStream, ProviderStream } from "./provider.ts";
+import {
+  MAX_PROVIDER_BUFFER_BYTES,
+  type OpenStream,
+  type ProviderStream,
+} from "./provider.ts";
 
 export const MISTRAL_DEFAULT_MODEL = "voxtral-mini-transcribe-realtime-3";
 
@@ -78,6 +82,10 @@ export function createMistral({
           if (state !== "open") {
             return;
           }
+          if (ws.bufferedAmount > MAX_PROVIDER_BUFFER_BYTES) {
+            fail(new Error("provider does not keep up"));
+            return;
+          }
           ws.send(
             JSON.stringify({
               type: "input_audio.append",
@@ -120,6 +128,10 @@ export function createMistral({
             }
             break;
           case "transcription.text.delta":
+            // Nothing reaches the client before the stream is open.
+            if (state !== "open") {
+              break;
+            }
             pending += message.text ?? "";
             if (SENTENCE_END.test(pending.trim())) {
               sendFinal();
@@ -128,7 +140,9 @@ export function createMistral({
             }
             break;
           case "transcription.done":
-            sendFinal();
+            if (state === "open") {
+              sendFinal();
+            }
             break;
           case "error":
             fail(new Error(`Mistral error: ${describeError(message.error)}`));

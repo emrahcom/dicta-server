@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { type TestContext, test } from "node:test";
 import { createMistral } from "../../src/providers/mistral.ts";
-import { closeFully, events, fakeServer, settle } from "./helpers.ts";
+import {
+  closeFully,
+  events,
+  fakeServer,
+  pause,
+  sendUntilError,
+  settle,
+} from "./helpers.ts";
 
 // Opens a stream against the fake server and completes the handshake.
 async function open(t: TestContext) {
@@ -116,6 +123,33 @@ test("fails the open without session.created within 10 seconds", async (t) => {
   t.mock.timers.tick(10_000);
 
   await assert.rejects(opening, /no session.created within 10 seconds/);
+});
+
+test("fails the stream when the provider does not keep up", async (t) => {
+  const { mistral, recorded, stream } = await open(t);
+  await pause(mistral);
+
+  await sendUntilError(stream, recorded);
+
+  assert.match(recorded.errors[0]?.message ?? "", /does not keep up/);
+});
+
+test("ignores transcription messages before the stream is open", async (t) => {
+  const mistral = await fakeServer(t);
+  const recorded = events();
+  const opening = createMistral({
+    apiKey: "key",
+    model: "model",
+    url: mistral.url,
+  })(recorded, {});
+  await mistral.send({ type: "transcription.text.delta", text: "early" });
+  await mistral.send({ type: "transcription.done" });
+  await mistral.send({ type: "session.created" });
+  const stream = await opening;
+  t.after(() => closeFully(stream, mistral));
+  await settle();
+
+  assert.deepEqual(recorded.transcripts, []);
 });
 
 test("sends audio as base64", async (t) => {

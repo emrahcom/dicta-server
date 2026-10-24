@@ -113,3 +113,20 @@ export async function settle() {
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
 }
+
+// Stops the fake server from reading, as a provider that does not keep up.
+export async function pause(server: FakeServer) {
+  (await server.connection).request.socket.pause();
+}
+
+// Sends audio until the provider reports an error, or gives up after 64 MiB.
+export async function sendUntilError(
+  stream: { sendAudio: (chunk: Buffer) => void },
+  recorded: { errors: Error[] },
+) {
+  const chunk = Buffer.alloc(64 * 1024);
+  for (let i = 0; i < 1024 && recorded.errors.length === 0; i++) {
+    stream.sendAudio(chunk);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}

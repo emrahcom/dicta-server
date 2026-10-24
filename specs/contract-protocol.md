@@ -51,7 +51,7 @@ it never changes, and the next transcript starts new text.
 
 `error`, sent when the speech-to-text provider fails, before the server closes
 the socket with code `1011`. It can come before `ready` when the provider cannot
-be reached.
+be reached or refuses the session, for example for an unsupported language.
 
 ```json
 { "type": "error", "message": "..." }

@@ -55,45 +55,58 @@ Message formats are in `contract-protocol.md`.
 - A provider catches errors in its own event handlers and timers and reports
   them through its error callback. It never lets them escape, because the server
   cannot catch them there.
-- `stub` is a provider for development and tests. It needs no API key and calls
-  no service. For each audio frame it sends an interim with the total bytes
-  received so far, and after 1 second without audio a final with the same text.
-- `mistral` uses Mistral's realtime transcription API (Voxtral) over a
-  WebSocket. The stream is open when Mistral confirms the session with
-  `session.created`, as Mistral's SDK does. Audio is forwarded as it is, since
-  Mistral accepts the same PCM format. Mistral takes a two-letter language code:
-  the language code of the tag is sent when it has two letters (`de` for
-  `de-DE`), otherwise Mistral detects the language itself. Each text delta is
-  sent as an interim with the text since the last final. A final is sent when
-  that text ends a sentence, and after 1 second without audio frames, when the
-  server asks Mistral to flush. When Mistral fails, text not yet sent as a final
-  is sent as a final first. A message from Mistral that cannot be parsed, or has
-  an unknown type, is logged as a warning and skipped; the stream continues.
-- Mistral protocol references. The docs give the endpoint, audio format and
-  events:
+- A message from a provider that cannot be parsed, or has an unknown type, is
+  logged as a warning and skipped; the stream continues.
+
+### stub
+
+- For development and tests. It needs no API key and calls no service.
+- For each audio frame it sends an interim with the total bytes received so far,
+  and after 1 second without audio a final with the same text.
+
+### mistral
+
+- Mistral's realtime transcription API (Voxtral) over a WebSocket.
+- The stream is open when Mistral confirms the session with `session.created`,
+  as Mistral's SDK does.
+- Audio is forwarded as it is, since Mistral accepts the same PCM format.
+- Mistral takes a two-letter language code: the language code of the tag is sent
+  when it has two letters (`de` for `de-DE`), otherwise Mistral detects the
+  language itself.
+- Each text delta is sent as an interim with the text since the last final. A
+  final is sent when that text ends a sentence, and after 1 second without audio
+  frames, when the server asks Mistral to flush.
+- When Mistral fails, text not yet sent as a final is sent as a final first.
+- Protocol references. The docs give the endpoint, audio format and events:
   https://docs.mistral.ai/studio/audio/speech_to_text/realtime_transcription.md
   The client messages (`session.update`, `input_audio.append`,
   `input_audio.flush`) are defined only in the SDK source,
   `src/mistralai/client/models/realtimetranscription*.py` in
   https://github.com/mistralai/client-python.
-- `deepgram` uses Deepgram's live transcription API over a WebSocket, with smart
-  formatting and an endpointing of 500 ms. The stream is open when the WebSocket
-  opens. Audio is forwarded as it is. The language tag is sent as it is, and
-  without one the language is English. When Deepgram refuses a tag with a region
-  or script (`de-BE`), the server opens again with its language code (`de`). A
-  language Deepgram does not support at all fails the open. Deepgram sends
-  results per segment; finished segments are collected, and each result is sent
-  as an interim with the collected text and the current segment. A final is sent
-  when Deepgram marks the end of speech (`speech_final`) or answers a
-  `Finalize`, which the server sends after 1 second without audio frames. A
-  `KeepAlive` every 4 seconds keeps the stream open, since Deepgram closes it
-  after 10 seconds without audio. On close the server sends `CloseStream`. When
-  Deepgram fails, collected text is sent as a final first. Deepgram's `Error`
-  messages are not fatal and are logged as warnings; fatal problems close the
-  socket and count as a failure. Messages that cannot be parsed, or have an
-  unknown type, are handled as for Mistral. Requests opt out of Deepgram's Model
-  Improvement Program (`mip_opt_out`) unless `DEEPGRAM_MIP_OPT_IN` is `true`.
-- Deepgram protocol references, checked on 2026-10-24:
+
+### deepgram
+
+- Deepgram's live transcription API over a WebSocket, with smart formatting and
+  an endpointing of 500 ms.
+- The stream is open when the WebSocket opens.
+- Audio is forwarded as it is.
+- The language tag is sent as it is, and without one the language is English.
+  When Deepgram refuses a tag with a region or script (`de-BE`), the server
+  opens again with its language code (`de`). A language Deepgram does not
+  support at all fails the open.
+- Deepgram sends results per segment. Finished segments are collected, and each
+  result is sent as an interim with the collected text and the current segment.
+- A final is sent when Deepgram marks the end of speech (`speech_final`) or
+  answers a `Finalize`, which the server sends after 1 second without audio
+  frames.
+- A `KeepAlive` every 4 seconds keeps the stream open, since Deepgram closes it
+  after 10 seconds without audio. On close the server sends `CloseStream`.
+- When Deepgram fails, collected text is sent as a final first.
+- Deepgram's `Error` messages are not fatal and are logged as warnings; fatal
+  problems close the socket and count as a failure.
+- Requests opt out of Deepgram's Model Improvement Program (`mip_opt_out`)
+  unless `DEEPGRAM_MIP_OPT_IN` is `true`.
+- Protocol references, checked on 2026-10-24:
   https://developers.deepgram.com/reference/speech-to-text-api/listen-streaming
   https://developers.deepgram.com/docs/understand-endpointing-interim-results
   https://developers.deepgram.com/docs/finalize

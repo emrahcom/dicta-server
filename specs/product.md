@@ -28,7 +28,7 @@ dicta-server is the server side. It receives a user's microphone audio from
 - Authenticated WebSocket connection.
 - Audio in, transcripts out: interim results while the user speaks, a final
   result when they stop.
-- One speech-to-text provider.
+- Mistral and Deepgram as speech-to-text providers, chosen per server.
 
 Later, the server may turn final transcripts into the application's actions
 (tool calls) instead of returning text only.

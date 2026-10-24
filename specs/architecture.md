@@ -39,6 +39,13 @@ Message formats are in `contract-protocol.md`.
 - Each provider is an adapter behind one interface: open a stream, send audio,
   receive interim and final transcripts, close.
 - The provider and its API key come from the server configuration.
+- The provider stream is opened after the token is accepted and closed with
+  the connection. `ready` is sent only after it is open, so the server never
+  buffers audio.
+- `stub` is a provider for development and tests. It needs no API key and
+  calls no service. For each audio frame it sends an interim with the total
+  bytes received so far, and after 1 second without audio a final with the
+  same text.
 
 ## State
 
@@ -61,3 +68,5 @@ Environment variables:
 - `ALLOW_UNAUTHENTICATED`: when `true`, tokens are not checked at all. For
   development only. Default `false`. The server logs a warning at startup when
   it is on.
+- `PROVIDER`: the speech-to-text provider. Required; the server does not start
+  without a known one. Values: `stub`.

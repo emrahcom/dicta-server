@@ -28,8 +28,8 @@ small frames, never merged into one.
 Text frames, one JSON object each, always with a `type` field. Clients ignore
 types they do not know.
 
-`ready`, sent once after the token is accepted. The client starts sending audio
-after it.
+`ready`, sent once after the token is accepted and the speech-to-text provider
+is connected. The client starts sending audio after it.
 
 ```json
 { "type": "ready", "sessionId": "..." }

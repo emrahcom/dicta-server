@@ -43,7 +43,8 @@ it never changes, and the next transcript starts new text.
 { "type": "transcript", "text": "add a note", "final": false }
 ```
 
-`error`, sent before the server closes the socket with code `1011`.
+`error`, sent before the server closes the socket with code `1011`. It can come
+before `ready` when the speech-to-text provider cannot be reached.
 
 ```json
 { "type": "error", "message": "..." }

@@ -42,6 +42,10 @@ Message formats are in `contract-protocol.md`.
 - The provider stream is opened after the token is accepted and closed with
   the connection. `ready` is sent only after it is open, so the server never
   buffers audio.
+- A provider stream can fail while opening or later. Either way the server
+  logs the details, sends a generic `error` to the client and closes with
+  `1011`. Provider details never reach the client. Only that connection is
+  affected.
 - `stub` is a provider for development and tests. It needs no API key and
   calls no service. For each audio frame it sends an interim with the total
   bytes received so far, and after 1 second without audio a final with the

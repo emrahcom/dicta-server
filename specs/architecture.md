@@ -61,7 +61,8 @@ Message formats are in `contract-protocol.md`.
   with the text since the last final. A final is sent when that text ends a
   sentence, and after 1 second without audio frames, when the server asks
   Mistral to flush. When Mistral fails, text not yet sent as a final is sent as
-  a final first.
+  a final first. A message from Mistral that cannot be parsed, or has an unknown
+  type, is logged as a warning and skipped; the stream continues.
 - Mistral protocol references. The docs give the endpoint, audio format and
   events:
   https://docs.mistral.ai/studio/audio/speech_to_text/realtime_transcription.md

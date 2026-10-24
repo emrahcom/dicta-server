@@ -14,8 +14,8 @@ Node.js 24 or later and TypeScript (strict).
 - `specs/contract-protocol.md` is the protocol between `dicta-js` and the
   server, and the source of truth for both repos.
 - Tasks are files in `tasks/open/` and `tasks/done/`, named
-  `YYYY-MM-DD-slug.md`. The folder is the status. `specs/tasks.md` defines the
-  format, including how findings are handled.
+  `YYYY-MM-DD-HHMMSS-slug.md` (UTC). The folder is the status. `specs/tasks.md`
+  defines the format, including how findings are handled.
 
 ## Verification commands
 
@@ -37,6 +37,6 @@ Type prefix (`feat`, `fix`, `refactor`, `test`, `docs`, `chore`), subject only,
 no body, no trailers. A task lands as up to three commits:
 
 - `docs: <spec change>`
-- `chore: add task 2026-10-24-jwt-auth`
-- `<type>: implement 2026-10-24-jwt-auth`, with the type that fits the change.
-  It also moves the task file to `tasks/done/`.
+- `chore: add task 2026-10-24-142731-jwt-auth`
+- `<type>: implement 2026-10-24-142731-jwt-auth`, with the type that fits the
+  change. It also moves the task file to `tasks/done/`.

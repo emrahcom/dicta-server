@@ -1,7 +1,10 @@
 # Tasks format
 
-One file per task in `tasks/open/`, named `YYYY-MM-DD-slug.md` with the date it
-was created. It moves to `tasks/done/` in the commit that implements it.
+One file per task in `tasks/open/`, named `YYYY-MM-DD-HHMMSS-slug.md`: the date
+(year, month, day) and time (hours, minutes, seconds) it was created, in UTC, so
+the names sort in the order the tasks were added. For example
+`2026-10-24-142731-jwt-auth.md` was created on 24 October 2026 at 14:27:31 UTC.
+It moves to `tasks/done/` in the commit that implements it.
 
 ```
 # Short title

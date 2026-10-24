@@ -22,6 +22,9 @@ Message formats are in `contract-protocol.md`.
   behind it.
 - The server creates the session id. It never takes one from the client.
 - No session resume. After a disconnect the client opens a new connection.
+- The server pings every connection every 30 seconds. A connection that has not
+  answered the previous ping is closed, so a client that vanished without
+  closing does not keep a provider stream open.
 
 ## Authentication
 

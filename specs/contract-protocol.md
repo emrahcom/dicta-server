@@ -54,5 +54,9 @@ before `ready` when the speech-to-text provider cannot be reached.
 
 Either side may close at any time. The client closes when it is done.
 
+The server sends a WebSocket ping every 30 seconds. A client that does not
+answer with a pong before the next ping is disconnected. Browsers and common
+WebSocket libraries answer pings automatically.
+
 Code `1001` from the server means it is shutting down. The client may open a
 new connection, which reaches another instance.

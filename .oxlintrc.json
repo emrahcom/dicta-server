@@ -8,6 +8,7 @@
         ]
       }
     ],
+    "typescript/no-misused-promises": "warn",
     "no-unused-vars": [
       "warn",
       { "argsIgnorePattern": "^_", "ignoreRestSiblings": true }

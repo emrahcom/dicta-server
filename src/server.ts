@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { errors, jwtVerify } from "jose";
-import { WebSocketServer } from "ws";
+import { WebSocketServer, type WebSocket } from "ws";
 import type { OpenStream, ProviderStream } from "./providers/provider.ts";
 
 const LISTEN_PATH = "/dicta/v1/listen";
@@ -40,7 +40,7 @@ export function createServer({
     }
     // The upgrade is accepted before the token check, so the client can read
     // the 4001 close code.
-    wss.handleUpgrade(req, socket, head, async (ws) => {
+    wss.handleUpgrade(req, socket, head, (ws) => {
       const sessionId = randomUUID();
       const tag = `[${sessionId}]`;
       // Without a listener, a protocol error (for example a too large frame)
@@ -48,66 +48,81 @@ export function createServer({
       ws.on("error", (err) =>
         console.warn(`${tag} connection error: ${err.message}`),
       );
-      let sub: string | undefined;
-      if (secret) {
-        const check = await checkToken(url.searchParams.get("token"), secret);
-        if (!check.ok) {
-          console.warn(`${tag} token rejected: ${check.reason}`);
-          ws.close(4001);
-          return;
-        }
-        sub = check.sub;
-      }
-      if (ws.readyState !== ws.OPEN) {
-        return;
-      }
-      console.log(`${tag} connected${sub === undefined ? "" : ` sub=${sub}`}`);
-
-      // Details stay in the log; the client gets a generic message.
-      const fail = (err: unknown) => {
-        console.error(
-          `${tag} provider error: ${err instanceof Error ? err.message : String(err)}`,
-        );
+      // ws ignores the callback's return value, so an error left in this
+      // promise would crash the process.
+      handleConnection(ws, url, sessionId).catch((err: unknown) => {
+        console.error(`${tag} unexpected error: ${errorMessage(err)}`);
         if (ws.readyState === ws.OPEN) {
-          ws.send(
-            JSON.stringify({ type: "error", message: PROVIDER_ERROR_MESSAGE }),
-          );
           ws.close(1011);
         }
-      };
-
-      let stream: ProviderStream;
-      try {
-        stream = await openStream({
-          onTranscript: (transcript) => {
-            if (ws.readyState === ws.OPEN) {
-              ws.send(JSON.stringify({ type: "transcript", ...transcript }));
-            }
-          },
-          onError: fail,
-        });
-      } catch (err) {
-        fail(err);
-        return;
-      }
-      if (ws.readyState !== ws.OPEN) {
-        stream.close();
-        return;
-      }
-      ws.on("close", () => stream.close());
-      ws.on("message", (data, isBinary) => {
-        if (!isBinary) {
-          return;
-        }
-        try {
-          stream.sendAudio(data as Buffer);
-        } catch (err) {
-          fail(err);
-        }
       });
-      ws.send(JSON.stringify({ type: "ready", sessionId }));
     });
   });
+
+  async function handleConnection(
+    ws: WebSocket,
+    url: URL,
+    sessionId: string,
+  ): Promise<void> {
+    const tag = `[${sessionId}]`;
+
+    let sub: string | undefined;
+    if (secret) {
+      const check = await checkToken(url.searchParams.get("token"), secret);
+      if (!check.ok) {
+        console.warn(`${tag} token rejected: ${check.reason}`);
+        ws.close(4001);
+        return;
+      }
+      sub = check.sub;
+    }
+    if (ws.readyState !== ws.OPEN) {
+      return;
+    }
+    console.log(`${tag} connected${sub === undefined ? "" : ` sub=${sub}`}`);
+
+    // Details stay in the log; the client gets a generic message.
+    const fail = (err: unknown) => {
+      console.error(`${tag} provider error: ${errorMessage(err)}`);
+      if (ws.readyState === ws.OPEN) {
+        ws.send(
+          JSON.stringify({ type: "error", message: PROVIDER_ERROR_MESSAGE }),
+        );
+        ws.close(1011);
+      }
+    };
+
+    let stream: ProviderStream;
+    try {
+      stream = await openStream({
+        onTranscript: (transcript) => {
+          if (ws.readyState === ws.OPEN) {
+            ws.send(JSON.stringify({ type: "transcript", ...transcript }));
+          }
+        },
+        onError: fail,
+      });
+    } catch (err) {
+      fail(err);
+      return;
+    }
+    if (ws.readyState !== ws.OPEN) {
+      stream.close();
+      return;
+    }
+    ws.on("close", () => stream.close());
+    ws.on("message", (data, isBinary) => {
+      if (!isBinary) {
+        return;
+      }
+      try {
+        stream.sendAudio(data as Buffer);
+      } catch (err) {
+        fail(err);
+      }
+    });
+    ws.send(JSON.stringify({ type: "ready", sessionId }));
+  }
 
   // Stops accepting connections, closes the open ones with 1001 and resolves
   // when all of them are closed.
@@ -121,6 +136,10 @@ export function createServer({
   }
 
   return { server, shutdown };
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 type TokenCheck = { ok: true; sub?: string } | { ok: false; reason: string };

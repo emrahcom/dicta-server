@@ -269,6 +269,31 @@ test("sends error and closes with 1011 when sending audio throws", async (t) => 
   assert.deepEqual(await result, { messages: [PROVIDER_ERROR], code: 1011 });
 });
 
+test("closes with 1011 and keeps serving after an unexpected error", async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+  const logged = t.mock.method(console, "error", () => {});
+  const stringify = JSON.stringify;
+  const broken = t.mock.method(JSON, "stringify", (value: unknown) => {
+    if ((value as { type?: string }).type === "ready") {
+      throw new Error("unexpected");
+    }
+    return stringify(value);
+  });
+
+  const first = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const result = await untilClose(first);
+  broken.mock.restore();
+
+  assert.deepEqual(result, { messages: [], code: 1011 });
+  assert.match(
+    logged.mock.calls[0].arguments[0],
+    /^\[[0-9a-f-]+\] unexpected error: unexpected$/,
+  );
+  const second = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  assert.equal(JSON.parse((await nextMessage(second)).data).type, "ready");
+});
+
 test("a failing connection does not affect another one", async (t) => {
   const failing = fakeProvider();
   const healthy = fakeProvider();

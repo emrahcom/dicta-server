@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import { SignJWT } from 'jose';
-import type { OpenStream, Transcript } from '../src/providers/provider.ts';
+import type {
+  OpenStream,
+  ProviderStream,
+  StreamEvents,
+  Transcript,
+} from '../src/providers/provider.ts';
 import { openStubStream } from '../src/providers/stub.ts';
 import { createServer, type AuthOptions } from '../src/server.ts';
 
@@ -98,27 +103,126 @@ test('sends ready without a token when unauthenticated is allowed', async (t) =>
   assert.equal(message.type, 'ready');
 });
 
-// A provider that records what it receives and lets the test report
-// transcripts and decide when the stream is open.
+// A provider that records what it receives and lets the test decide when the
+// stream opens or fails and what it reports.
 function fakeProvider() {
   let open = () => {};
-  const opened = new Promise<void>((resolve) => (open = resolve));
+  let failOpen = (_error: Error) => {};
+  const opened = new Promise<void>((resolve, reject) => {
+    open = resolve;
+    failOpen = reject;
+  });
   const fake = {
     chunks: [] as Buffer[],
     closed: false,
+    sendAudioThrows: false,
     report: (_transcript: Transcript) => {},
+    fail: (_error: Error) => {},
     open,
-    openStream: (async (onTranscript) => {
-      fake.report = onTranscript;
-      await opened;
-      return {
-        sendAudio: (chunk) => fake.chunks.push(chunk),
-        close: () => (fake.closed = true),
-      };
-    }) as OpenStream,
+    failOpen,
+    openStream,
   };
+
+  async function openStream({ onTranscript, onError }: StreamEvents): Promise<ProviderStream> {
+    fake.report = onTranscript;
+    fake.fail = onError;
+    await opened;
+    return {
+      sendAudio: (chunk) => {
+        if (fake.sendAudioThrows) {
+          throw new Error('send failed with secret details');
+        }
+        fake.chunks.push(chunk);
+      },
+      close: () => (fake.closed = true),
+    };
+  }
+
   return fake;
 }
+
+// Collects every message until the socket closes, then resolves with them and
+// the close code.
+function untilClose(ws: WebSocket): Promise<{ messages: any[]; code: number }> {
+  const messages: any[] = [];
+  return new Promise((resolve) => {
+    ws.onmessage = (event) => messages.push(JSON.parse(event.data));
+    ws.onclose = (event) => resolve({ messages, code: event.code });
+  });
+}
+
+const PROVIDER_ERROR = { type: 'error', message: 'speech-to-text provider failed' };
+
+test('sends error and closes with 1011 when the provider cannot open', async (t) => {
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const result = untilClose(ws);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  fake.failOpen(new Error('open failed with secret details'));
+
+  assert.deepEqual(await result, { messages: [PROVIDER_ERROR], code: 1011 });
+});
+
+test('sends error and closes with 1011 when an open stream fails', async (t) => {
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ready = nextMessage(ws);
+  fake.open();
+  await ready;
+  const result = untilClose(ws);
+  fake.fail(new Error('stream failed with secret details'));
+
+  assert.deepEqual(await result, { messages: [PROVIDER_ERROR], code: 1011 });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(fake.closed, true);
+});
+
+test('sends error and closes with 1011 when sending audio throws', async (t) => {
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ready = nextMessage(ws);
+  fake.open();
+  await ready;
+  const result = untilClose(ws);
+  fake.sendAudioThrows = true;
+  ws.send(new Uint8Array(10));
+
+  assert.deepEqual(await result, { messages: [PROVIDER_ERROR], code: 1011 });
+});
+
+test('a failing connection does not affect another one', async (t) => {
+  const failing = fakeProvider();
+  const healthy = fakeProvider();
+  const fakes = [failing, healthy];
+  const { base, shutdown } = await start({
+    openStream: (events) => fakes.shift()!.openStream(events),
+  });
+  t.after(shutdown);
+
+  const first = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const firstResult = untilClose(first);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const second = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const secondReady = nextMessage(second);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  failing.failOpen(new Error('open failed'));
+  healthy.open();
+
+  assert.equal((await firstResult).code, 1011);
+  await secondReady;
+  const transcript = nextMessage(second);
+  healthy.report({ text: 'still here', final: false });
+  assert.equal(JSON.parse((await transcript).data).text, 'still here');
+});
 
 test('sends ready only after the provider stream is open', async (t) => {
   const fake = fakeProvider();

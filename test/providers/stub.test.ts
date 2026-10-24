@@ -6,7 +6,10 @@ import { openStubStream } from '../../src/providers/stub.ts';
 test('reports the total bytes as interims, then a final after 1 second', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const transcripts: Transcript[] = [];
-  const stream = await openStubStream((transcript) => transcripts.push(transcript));
+  const stream = await openStubStream({
+    onTranscript: (transcript) => transcripts.push(transcript),
+    onError: () => {},
+  });
 
   stream.sendAudio(Buffer.alloc(100));
   stream.sendAudio(Buffer.alloc(50));
@@ -23,7 +26,10 @@ test('reports the total bytes as interims, then a final after 1 second', async (
 test('sends no final after close', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const transcripts: Transcript[] = [];
-  const stream = await openStubStream((transcript) => transcripts.push(transcript));
+  const stream = await openStubStream({
+    onTranscript: (transcript) => transcripts.push(transcript),
+    onError: () => {},
+  });
 
   stream.sendAudio(Buffer.alloc(10));
   stream.close();

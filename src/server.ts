@@ -3,10 +3,11 @@ import { once } from 'node:events';
 import { createServer as createHttpServer, type Server } from 'node:http';
 import { jwtVerify } from 'jose';
 import { WebSocketServer } from 'ws';
-import type { OpenStream } from './providers/provider.ts';
+import type { OpenStream, ProviderStream } from './providers/provider.ts';
 
 const LISTEN_PATH = '/dicta/v1/listen';
 const MAX_FRAME_BYTES = 64 * 1024;
+const PROVIDER_ERROR_MESSAGE = 'speech-to-text provider failed';
 
 export type AuthOptions = { jwtSecret: string } | { allowUnauthenticated: true };
 
@@ -40,19 +41,42 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
         return;
       }
 
-      const stream = await openStream((transcript) => {
+      // Details stay in the log; the client gets a generic message.
+      const fail = (err: unknown) => {
+        console.error(`provider error: ${err instanceof Error ? err.message : String(err)}`);
         if (ws.readyState === ws.OPEN) {
-          ws.send(JSON.stringify({ type: 'transcript', ...transcript }));
+          ws.send(JSON.stringify({ type: 'error', message: PROVIDER_ERROR_MESSAGE }));
+          ws.close(1011);
         }
-      });
+      };
+
+      let stream: ProviderStream;
+      try {
+        stream = await openStream({
+          onTranscript: (transcript) => {
+            if (ws.readyState === ws.OPEN) {
+              ws.send(JSON.stringify({ type: 'transcript', ...transcript }));
+            }
+          },
+          onError: fail,
+        });
+      } catch (err) {
+        fail(err);
+        return;
+      }
       if (ws.readyState !== ws.OPEN) {
         stream.close();
         return;
       }
       ws.on('close', () => stream.close());
       ws.on('message', (data, isBinary) => {
-        if (isBinary) {
+        if (!isBinary) {
+          return;
+        }
+        try {
           stream.sendAudio(data as Buffer);
+        } catch (err) {
+          fail(err);
         }
       });
       ws.send(JSON.stringify({ type: 'ready', sessionId: randomUUID() }));

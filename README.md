@@ -13,10 +13,11 @@ npm install
 PROVIDER=stub ALLOW_UNAUTHENTICATED=true npm start
 ```
 
-With Mistral as the speech-to-text provider:
+With Mistral or Deepgram as the speech-to-text provider:
 
 ```sh
 PROVIDER=mistral MISTRAL_API_KEY=... JWT_SECRET=... npm start
+PROVIDER=deepgram DEEPGRAM_API_KEY=... JWT_SECRET=... npm start
 ```
 
 Configuration is described in `specs/architecture.md`, the protocol in

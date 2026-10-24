@@ -33,7 +33,9 @@ Message formats are in `contract-protocol.md`.
 - The application's backend holds the signing key and issues the tokens. The key
   never reaches the browser.
 - HS256 with a shared secret (`JWT_SECRET`). The `jose` package verifies it.
-- `exp` is required. `sub` is optional and identifies the user.
+- `exp` is required and is checked when the connection opens. An open connection
+  is not closed when its token expires. `sub` is optional and identifies the
+  user.
 - The upgrade is accepted before the token is checked, so the client can read
   the `4001` close code.
 
@@ -57,6 +59,9 @@ Message formats are in `contract-protocol.md`.
   cannot catch them there.
 - A message from a provider that cannot be parsed, or has an unknown type, is
   logged as a warning and skipped; the stream continues.
+- When more than 1 MiB of audio waits to be sent to the provider, because the
+  provider does not keep up, the provider stream fails. Audio is never buffered
+  without limit.
 
 ### stub
 
@@ -74,8 +79,9 @@ Message formats are in `contract-protocol.md`.
   when it has two letters (`de` for `de-DE`), otherwise Mistral detects the
   language itself.
 - Each text delta is sent as an interim with the text since the last final. A
-  final is sent when that text ends a sentence, and after 1 second without audio
-  frames, when the server asks Mistral to flush.
+  final is sent only after 1 second without audio frames, when the server asks
+  Mistral to flush. A sentence end does not make a final, because Mistral sends
+  a period as its own delta and "Dr. Smith" or "3.50" would be cut.
 - When Mistral fails, text not yet sent as a final is sent as a final first.
 - Protocol references. The docs give the endpoint, audio format and events:
   https://docs.mistral.ai/studio/audio/speech_to_text/realtime_transcription.md

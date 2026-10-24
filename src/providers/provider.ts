@@ -15,6 +15,14 @@ export type StreamEvents = {
   onWarning: (warning: string) => void;
 };
 
+export type StreamOptions = {
+  // The client's language as a well-formed BCP 47 tag, when it gave one.
+  lang?: string;
+};
+
 // Opens one provider stream for one connection. Events are reported until the
 // stream is closed.
-export type OpenStream = (events: StreamEvents) => Promise<ProviderStream>;
+export type OpenStream = (
+  events: StreamEvents,
+  options: StreamOptions,
+) => Promise<ProviderStream>;

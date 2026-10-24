@@ -34,7 +34,7 @@ export function createMistral({
   model: string;
   url?: string;
 }): OpenStream {
-  return ({ onTranscript, onError, onWarning }) =>
+  return ({ onTranscript, onError, onWarning }, { lang }) =>
     new Promise((resolve, reject) => {
       const ws = new WebSocket(`${url}?model=${encodeURIComponent(model)}`, {
         headers: { Authorization: `Bearer ${apiKey}` },
@@ -114,6 +114,7 @@ export function createMistral({
                   type: "session.update",
                   session: {
                     audio_format: { encoding: "pcm_s16le", sample_rate: 16000 },
+                    ...mistralLanguage(lang),
                   },
                 }),
               );
@@ -199,4 +200,11 @@ function describeError(error: MistralMessage["error"]): string {
       ? error.message
       : JSON.stringify(error?.message);
   return error?.code === undefined ? message : `${error.code} ${message}`;
+}
+
+// Mistral takes a two-letter language code; without one it detects the
+// language itself.
+function mistralLanguage(lang: string | undefined): { language?: string } {
+  const code = lang?.split("-")[0];
+  return code?.length === 2 ? { language: code.toLowerCase() } : {};
 }

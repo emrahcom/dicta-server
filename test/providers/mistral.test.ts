@@ -83,7 +83,7 @@ async function open(t: TestContext) {
     apiKey: "key",
     model: "model",
     url: mistral.url,
-  })(recorded);
+  })(recorded, {});
   await mistral.send({ type: "session.created" });
   const stream = await opening;
   t.after(() => closeFully(stream, mistral));
@@ -117,6 +117,7 @@ test("connects with the model and the API key", async (t) => {
   const mistral = await fakeMistral(t);
   void createMistral({ apiKey: "key", model: "a b", url: mistral.url })(
     events(),
+    {},
   ).catch(() => {});
 
   const { request } = await mistral.connection;
@@ -131,7 +132,7 @@ test("opens on session.created and then sends the audio format", async (t) => {
     apiKey: "key",
     model: "model",
     url: mistral.url,
-  })(events());
+  })(events(), {});
   await mistral.send({ type: "session.created" });
   const stream = await opening;
   t.after(() => closeFully(stream, mistral));
@@ -142,13 +143,40 @@ test("opens on session.created and then sends the audio format", async (t) => {
   });
 });
 
+const languageCases: { lang: string; language: string | undefined }[] = [
+  { lang: "de-DE", language: "de" },
+  { lang: "DE", language: "de" },
+  { lang: "en", language: "en" },
+  { lang: "ceb", language: undefined },
+];
+
+for (const { lang, language } of languageCases) {
+  test(`sends language ${String(language)} for lang ${lang}`, async (t) => {
+    const mistral = await fakeMistral(t);
+    const opening = createMistral({
+      apiKey: "key",
+      model: "model",
+      url: mistral.url,
+    })(events(), { lang });
+    await mistral.send({ type: "session.created" });
+    const stream = await opening;
+    t.after(() => closeFully(stream, mistral));
+
+    const update = (await mistral.next()) as {
+      session: { language?: string };
+    };
+
+    assert.equal(update.session.language, language);
+  });
+}
+
 test("fails the open on an error before session.created", async (t) => {
   const mistral = await fakeMistral(t);
   const opening = createMistral({
     apiKey: "key",
     model: "model",
     url: mistral.url,
-  })(events());
+  })(events(), {});
   await mistral.send({
     type: "error",
     error: { code: 1234, message: "bad model" },
@@ -163,7 +191,7 @@ test("fails the open when Mistral refuses the connection", async (t) => {
     apiKey: "key",
     model: "model",
     url: mistral.url,
-  })(events());
+  })(events(), {});
 
   await assert.rejects(opening, /HTTP 401/);
 });
@@ -175,7 +203,7 @@ test("fails the open without session.created within 10 seconds", async (t) => {
     apiKey: "key",
     model: "model",
     url: mistral.url,
-  })(events());
+  })(events(), {});
   await mistral.connection;
 
   t.mock.timers.tick(10_000);

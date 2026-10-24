@@ -6,6 +6,7 @@ import type {
   OpenStream,
   ProviderStream,
   StreamEvents,
+  StreamOptions,
   Transcript,
 } from "../src/providers/provider.ts";
 import { openStubStream } from "../src/providers/stub.ts";
@@ -164,16 +165,17 @@ function fakeProvider() {
     report: (_transcript: Transcript) => {},
     fail: (_error: Error) => {},
     warn: (_warning: string) => {},
+    options: undefined as StreamOptions | undefined,
     open,
     failOpen,
     openStream,
   };
 
-  async function openStream({
-    onTranscript,
-    onError,
-    onWarning,
-  }: StreamEvents): Promise<ProviderStream> {
+  async function openStream(
+    { onTranscript, onError, onWarning }: StreamEvents,
+    options: StreamOptions,
+  ): Promise<ProviderStream> {
+    fake.options = options;
     fake.report = onTranscript;
     fake.fail = onError;
     fake.warn = onWarning;
@@ -240,6 +242,50 @@ test("sends error and closes with 1011 when an open stream fails", async (t) => 
   assert.deepEqual(await result, { messages: [PROVIDER_ERROR], code: 1011 });
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(fake.closed, true);
+});
+
+const langCases: { name: string; query: string; lang: string | undefined }[] = [
+  { name: "a well-formed lang", query: "&lang=de-DE", lang: "de-DE" },
+  { name: "a three-letter lang", query: "&lang=ceb", lang: "ceb" },
+  { name: "no lang", query: "", lang: undefined },
+];
+
+for (const { name, query, lang } of langCases) {
+  test(`passes ${name} to the provider`, async (t) => {
+    const fake = fakeProvider();
+    const { base, shutdown } = await start({ openStream: fake.openStream });
+    t.after(shutdown);
+
+    const ws = new WebSocket(
+      `${base}/dicta/v1/listen?token=${await sign()}${query}`,
+    );
+    const ready = nextMessage(ws);
+    fake.open();
+    await ready;
+
+    assert.deepEqual(fake.options, { lang });
+  });
+}
+
+test("drops a malformed lang with a warning", async (t) => {
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+  const warned = t.mock.method(console, "warn", () => {});
+
+  const lang = encodeURIComponent("de_DE\n");
+  const ws = new WebSocket(
+    `${base}/dicta/v1/listen?token=${await sign()}&lang=${lang}`,
+  );
+  const ready = nextMessage(ws);
+  fake.open();
+  const { sessionId } = JSON.parse((await ready).data);
+
+  assert.deepEqual(fake.options, { lang: undefined });
+  assert.equal(
+    warned.mock.calls[0].arguments[0],
+    `[${sessionId}] invalid lang "de_DE\\n"`,
+  );
 });
 
 test("logs provider warnings with the session id and keeps the connection", async (t) => {
@@ -355,7 +401,7 @@ test("keeps serving when closing the provider stream throws", async (t) => {
   failing.closeThrows = true;
   const fakes = [failing, fakeProvider()];
   const { base, shutdown } = await start({
-    openStream: (events) => fakes.shift()!.openStream(events),
+    openStream: (events, options) => fakes.shift()!.openStream(events, options),
   });
   t.after(shutdown);
   const logged = t.mock.method(console, "error", () => {});
@@ -383,7 +429,7 @@ test("a failing connection does not affect another one", async (t) => {
   const healthy = fakeProvider();
   const fakes = [failing, healthy];
   const { base, shutdown } = await start({
-    openStream: (events) => fakes.shift()!.openStream(events),
+    openStream: (events, options) => fakes.shift()!.openStream(events, options),
   });
   t.after(shutdown);
 

@@ -13,7 +13,7 @@
 
 import WebSocket from "ws";
 import { quoteForLog } from "../logging.ts";
-import type { OpenStream, ProviderStream } from "./provider.ts";
+import type { OpenStream, ProviderStream, StreamEvents } from "./provider.ts";
 
 export const DEEPGRAM_DEFAULT_MODEL = "nova-3";
 
@@ -46,9 +46,16 @@ export function createDeepgram({
     params.set("mip_opt_out", "true");
   }
 
-  return ({ onTranscript, onError, onWarning }) =>
+  const connect = (
+    { onTranscript, onError, onWarning }: StreamEvents,
+    language: string | undefined,
+  ): Promise<ProviderStream> =>
     new Promise((resolve, reject) => {
-      const ws = new WebSocket(`${url}?${params}`, {
+      const query = new URLSearchParams(params);
+      if (language !== undefined) {
+        query.set("language", language);
+      }
+      const ws = new WebSocket(`${url}?${query}`, {
         headers: { Authorization: `Token ${apiKey}` },
       });
       let state: "opening" | "open" | "closed" = "opening";
@@ -177,9 +184,7 @@ export function createDeepgram({
         resolve(stream);
       });
       ws.on("unexpected-response", (_req, res) =>
-        fail(
-          new Error(`Deepgram rejected the connection: HTTP ${res.statusCode}`),
-        ),
+        fail(new RefusedError(res.statusCode ?? 0)),
       );
       ws.on("error", fail);
       ws.on("close", (code, reason) =>
@@ -207,6 +212,38 @@ export function createDeepgram({
         }
       });
     });
+
+  // A tag with a region or script that Deepgram refuses is retried with its
+  // language code (de-BE as de).
+  return async (events, { lang }) => {
+    try {
+      return await connect(events, lang);
+    } catch (err) {
+      const code = lang?.split("-")[0];
+      if (
+        !(err instanceof RefusedError && err.status === 400) ||
+        lang === undefined ||
+        code === undefined ||
+        code === lang
+      ) {
+        throw err;
+      }
+      events.onWarning(
+        `Deepgram refused lang ${quoteForLog(lang)}, using ${quoteForLog(code)}`,
+      );
+      return connect(events, code);
+    }
+  };
+}
+
+// Deepgram refused the WebSocket upgrade with an HTTP status.
+class RefusedError extends Error {
+  status: number;
+
+  constructor(status: number) {
+    super(`Deepgram rejected the connection: HTTP ${status}`);
+    this.status = status;
+  }
 }
 
 type DeepgramMessage = {

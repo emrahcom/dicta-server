@@ -16,6 +16,7 @@ export const FIXTURE_WORDS = ["westminster", "wordsworth", "librivox"];
 export async function transcribeFixture(
   t: TestContext,
   provider: string,
+  lang?: string,
 ): Promise<string> {
   const openStream = getProvider(provider)!(process.env);
   const { server, shutdown } = createServer({
@@ -32,7 +33,8 @@ export async function transcribeFixture(
   const pcm = wav.subarray(wav.indexOf("data") + 8);
   const finals: string[] = [];
 
-  const ws = new WebSocket(`ws://localhost:${port}/dicta/v1/listen`);
+  const query = lang === undefined ? "" : `?lang=${encodeURIComponent(lang)}`;
+  const ws = new WebSocket(`ws://localhost:${port}/dicta/v1/listen${query}`);
   await new Promise<void>((resolve, reject) => {
     ws.onmessage = (event) => {
       const message = JSON.parse(event.data as string) as {

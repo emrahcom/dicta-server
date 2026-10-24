@@ -12,7 +12,8 @@ test(
     timeout: 30_000,
   },
   async (t) => {
-    const text = await transcribeFixture(t, "mistral");
+    // Mistral gets en for en-US.
+    const text = await transcribeFixture(t, "mistral", "en-US");
     for (const word of FIXTURE_WORDS) {
       assert.ok(text.includes(word), `"${word}" missing in: ${text}`);
     }

@@ -12,7 +12,8 @@ test(
     timeout: 30_000,
   },
   async (t) => {
-    const text = await transcribeFixture(t, "deepgram");
+    // Deepgram refuses en-XY, so this also checks the fallback to en.
+    const text = await transcribeFixture(t, "deepgram", "en-XY");
     for (const word of FIXTURE_WORDS) {
       assert.ok(text.includes(word), `"${word}" missing in: ${text}`);
     }

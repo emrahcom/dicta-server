@@ -9,13 +9,24 @@ import type { Transcript } from "../../src/providers/provider.ts";
 
 // A Deepgram server inside the test. It records what the provider sends, JSON
 // as objects and audio as Buffers, and lets the test decide what to answer.
-async function fakeDeepgram(t: TestContext, options: { status?: number } = {}) {
+// `refuse` returns an HTTP status to refuse a request with, given its URL.
+async function fakeDeepgram(
+  t: TestContext,
+  options: { refuse?: (url: string) => number | undefined } = {},
+) {
+  const requests: string[] = [];
   const wss = new WebSocketServer({
     port: 0,
-    verifyClient:
-      options.status === undefined
-        ? undefined
-        : (_info, done) => done(false, options.status),
+    verifyClient: (info, done) => {
+      const url = info.req.url ?? "";
+      requests.push(url);
+      const status = options.refuse?.(url);
+      if (status === undefined) {
+        done(true);
+      } else {
+        done(false, status);
+      }
+    },
   });
   await once(wss, "listening");
   t.after(
@@ -52,6 +63,7 @@ async function fakeDeepgram(t: TestContext, options: { status?: number } = {}) {
   const { port } = wss.address() as AddressInfo;
   return {
     url: `ws://localhost:${port}`,
+    requests,
     connection,
     // The next message the provider sent.
     next: () =>
@@ -104,7 +116,7 @@ async function open(t: TestContext) {
     model: "model",
     mipOptIn: false,
     url: deepgram.url,
-  })(recorded);
+  })(recorded, {});
   t.after(() => closeFully(stream, deepgram));
   return { deepgram, recorded, stream };
 }
@@ -157,7 +169,7 @@ test("does not opt out of the Model Improvement Program when opted in", async (t
     model: "model",
     mipOptIn: true,
     url: deepgram.url,
-  })(events());
+  })(events(), {});
   t.after(() => closeFully(stream, deepgram));
 
   const { request } = await deepgram.connection;
@@ -171,15 +183,78 @@ test("does not opt out of the Model Improvement Program when opted in", async (t
 });
 
 test("fails the open when Deepgram refuses the connection", async (t) => {
-  const deepgram = await fakeDeepgram(t, { status: 401 });
+  const deepgram = await fakeDeepgram(t, { refuse: () => 401 });
   const opening = createDeepgram({
     apiKey: "key",
     model: "model",
     mipOptIn: false,
     url: deepgram.url,
-  })(events());
+  })(events(), {});
 
   await assert.rejects(opening, /HTTP 401/);
+});
+
+// The language parameter of each request the fake server received.
+function languages(deepgram: { requests: string[] }) {
+  return deepgram.requests.map((url) =>
+    new URL(url, "ws://localhost").searchParams.get("language"),
+  );
+}
+
+function openWithLang(
+  deepgram: Awaited<ReturnType<typeof fakeDeepgram>>,
+  recorded: ReturnType<typeof events>,
+  lang: string,
+) {
+  return createDeepgram({
+    apiKey: "key",
+    model: "model",
+    mipOptIn: false,
+    url: deepgram.url,
+  })(recorded, { lang });
+}
+
+test("sends lang as the language", async (t) => {
+  const deepgram = await fakeDeepgram(t);
+  const stream = await openWithLang(deepgram, events(), "en-GB");
+  t.after(() => closeFully(stream, deepgram));
+
+  assert.deepEqual(languages(deepgram), ["en-GB"]);
+});
+
+test("retries with the language code when Deepgram refuses the tag", async (t) => {
+  const deepgram = await fakeDeepgram(t, {
+    refuse: (url) => (url.includes("language=en-XY") ? 400 : undefined),
+  });
+  const recorded = events();
+  const stream = await openWithLang(deepgram, recorded, "en-XY");
+  t.after(() => closeFully(stream, deepgram));
+
+  assert.deepEqual(languages(deepgram), ["en-XY", "en"]);
+  assert.deepEqual(recorded.warnings, [
+    'Deepgram refused lang "en-XY", using "en"',
+  ]);
+});
+
+test("does not retry a refused language code", async (t) => {
+  const deepgram = await fakeDeepgram(t, { refuse: () => 400 });
+
+  await assert.rejects(openWithLang(deepgram, events(), "xx"), /HTTP 400/);
+  assert.deepEqual(languages(deepgram), ["xx"]);
+});
+
+test("fails when the language code is refused too", async (t) => {
+  const deepgram = await fakeDeepgram(t, { refuse: () => 400 });
+
+  await assert.rejects(openWithLang(deepgram, events(), "xx-YY"), /HTTP 400/);
+  assert.deepEqual(languages(deepgram), ["xx-YY", "xx"]);
+});
+
+test("does not retry a refusal other than 400", async (t) => {
+  const deepgram = await fakeDeepgram(t, { refuse: () => 401 });
+
+  await assert.rejects(openWithLang(deepgram, events(), "en-GB"), /HTTP 401/);
+  assert.deepEqual(languages(deepgram), ["en-GB"]);
 });
 
 test("fails the open when it does not open within 10 seconds", async (t) => {
@@ -198,7 +273,7 @@ test("fails the open when it does not open within 10 seconds", async (t) => {
     model: "model",
     mipOptIn: false,
     url: `ws://localhost:${port}`,
-  })(events());
+  })(events(), {});
   const [socket] = (await connected) as [{ destroy: () => void }];
   t.after(() => socket.destroy());
 

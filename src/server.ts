@@ -10,6 +10,8 @@ const LISTEN_PATH = "/dicta/v1/listen";
 const MAX_FRAME_BYTES = 64 * 1024;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PROVIDER_ERROR_MESSAGE = "speech-to-text provider failed";
+// A BCP 47 tag: a language code of 2 or 3 letters, then optional subtags.
+const LANG_TAG = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/;
 
 export type AuthOptions =
   { jwtSecret: string } | { allowUnauthenticated: true };
@@ -114,6 +116,12 @@ export function createServer({
       `${tag} connected${sub === undefined ? "" : ` sub=${quoteForLog(sub)}`}`,
     );
 
+    let lang = url.searchParams.get("lang") ?? undefined;
+    if (lang !== undefined && !LANG_TAG.test(lang)) {
+      console.warn(`${tag} invalid lang ${quoteForLog(lang)}`);
+      lang = undefined;
+    }
+
     // Details stay in the log; the client gets a generic message.
     const fail = (err: unknown) => {
       console.error(`${tag} provider error: ${errorMessage(err)}`);
@@ -127,17 +135,20 @@ export function createServer({
 
     let stream: ProviderStream;
     try {
-      stream = await openStream({
-        onTranscript: guard((transcript) => {
-          if (ws.readyState === ws.OPEN) {
-            ws.send(JSON.stringify({ type: "transcript", ...transcript }));
-          }
-        }),
-        onError: guard(fail),
-        onWarning: guard((warning) =>
-          console.warn(`${tag} provider: ${warning}`),
-        ),
-      });
+      stream = await openStream(
+        {
+          onTranscript: guard((transcript) => {
+            if (ws.readyState === ws.OPEN) {
+              ws.send(JSON.stringify({ type: "transcript", ...transcript }));
+            }
+          }),
+          onError: guard(fail),
+          onWarning: guard((warning) =>
+            console.warn(`${tag} provider: ${warning}`),
+          ),
+        },
+        { lang },
+      );
     } catch (err) {
       fail(err);
       return;

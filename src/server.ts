@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { createServer as createHttpServer, type Server } from 'node:http';
 import { WebSocketServer } from 'ws';
 
 const LISTEN_PATH = '/dicta/v1/listen';
 
-export function createServer(): Server {
+export function createServer(): { server: Server; shutdown: () => Promise<void> } {
   const server = createHttpServer((_req, res) => {
     res.writeHead(404).end();
   });
@@ -21,5 +22,16 @@ export function createServer(): Server {
     });
   });
 
-  return server;
+  // Stops accepting connections, closes the open ones with 1001 and resolves
+  // when all of them are closed.
+  async function shutdown(): Promise<void> {
+    server.close();
+    const closed = [...wss.clients].map((ws) => once(ws, 'close'));
+    for (const ws of wss.clients) {
+      ws.close(1001);
+    }
+    await Promise.all(closed);
+  }
+
+  return { server, shutdown };
 }

@@ -183,6 +183,23 @@ test('sends error and closes with 1011 when an open stream fails', async (t) => 
   assert.equal(fake.closed, true);
 });
 
+test('prefixes connection logs with the session id from ready', async (t) => {
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+  const logged = t.mock.method(console, 'error', () => {});
+
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ready = nextMessage(ws);
+  fake.open();
+  const { sessionId } = JSON.parse((await ready).data);
+  const result = untilClose(ws);
+  fake.fail(new Error('stream failed'));
+  await result;
+
+  assert.equal(logged.mock.calls[0].arguments[0], `[${sessionId}] provider error: stream failed`);
+});
+
 test('sends error and closes with 1011 when sending audio throws', async (t) => {
   const fake = fakeProvider();
   const { base, shutdown } = await start({ openStream: fake.openStream });

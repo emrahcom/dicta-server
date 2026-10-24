@@ -30,9 +30,11 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
     // The upgrade is accepted before the token check, so the client can read
     // the 4001 close code.
     wss.handleUpgrade(req, socket, head, async (ws) => {
+      const sessionId = randomUUID();
+      const tag = `[${sessionId}]`;
       // Without a listener, a protocol error (for example a too large frame)
       // would crash the process. ws closes the connection itself.
-      ws.on('error', (err) => console.warn(`connection error: ${err.message}`));
+      ws.on('error', (err) => console.warn(`${tag} connection error: ${err.message}`));
       if (secret && !(await isValidToken(url.searchParams.get('token'), secret))) {
         ws.close(4001);
         return;
@@ -43,7 +45,7 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
 
       // Details stay in the log; the client gets a generic message.
       const fail = (err: unknown) => {
-        console.error(`provider error: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`${tag} provider error: ${err instanceof Error ? err.message : String(err)}`);
         if (ws.readyState === ws.OPEN) {
           ws.send(JSON.stringify({ type: 'error', message: PROVIDER_ERROR_MESSAGE }));
           ws.close(1011);
@@ -79,7 +81,7 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
           fail(err);
         }
       });
-      ws.send(JSON.stringify({ type: 'ready', sessionId: randomUUID() }));
+      ws.send(JSON.stringify({ type: 'ready', sessionId }));
     });
   });
 

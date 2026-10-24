@@ -9,6 +9,7 @@ test("reports the total bytes as interims, then a final after 1 second", async (
   const stream = await openStubStream({
     onTranscript: (transcript) => transcripts.push(transcript),
     onError: () => {},
+    onWarning: () => {},
   });
 
   stream.sendAudio(Buffer.alloc(100));
@@ -29,6 +30,7 @@ test("sends no final after close", async (t) => {
   const stream = await openStubStream({
     onTranscript: (transcript) => transcripts.push(transcript),
     onError: () => {},
+    onWarning: () => {},
   });
 
   stream.sendAudio(Buffer.alloc(10));
@@ -48,6 +50,7 @@ test("reports an error thrown while sending the final", async (t) => {
       }
     },
     onError: (error) => errors.push(error),
+    onWarning: () => {},
   });
 
   stream.sendAudio(Buffer.alloc(10));

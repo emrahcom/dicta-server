@@ -12,6 +12,7 @@
 // fragments with their leading spaces ("The", " Bir", "ch", ".").
 
 import WebSocket from "ws";
+import { quoteForLog } from "../logging.ts";
 import type { OpenStream, ProviderStream } from "./provider.ts";
 
 export const MISTRAL_DEFAULT_MODEL = "voxtral-mini-transcribe-realtime-3";
@@ -33,7 +34,7 @@ export function createMistral({
   model: string;
   url?: string;
 }): OpenStream {
-  return ({ onTranscript, onError }) =>
+  return ({ onTranscript, onError, onWarning }) =>
     new Promise((resolve, reject) => {
       const ws = new WebSocket(`${url}?model=${encodeURIComponent(model)}`, {
         headers: { Authorization: `Bearer ${apiKey}` },
@@ -135,6 +136,12 @@ export function createMistral({
           case "error":
             fail(new Error(`Mistral error: ${describeError(message.error)}`));
             break;
+          case "session.updated":
+            break;
+          default:
+            onWarning(
+              `unknown message type ${quoteForLog(String(message.type))}`,
+            );
         }
       };
 
@@ -153,9 +160,13 @@ export function createMistral({
           return;
         }
         try {
-          handleMessage(
-            JSON.parse((data as Buffer).toString()) as MistralMessage,
-          );
+          const raw = data as Buffer;
+          const message = parseMessage(raw);
+          if (message === undefined) {
+            onWarning(`unparseable message (${raw.length} bytes)`);
+            return;
+          }
+          handleMessage(message);
         } catch (err) {
           fail(err);
         }
@@ -168,6 +179,18 @@ type MistralMessage = {
   text?: string;
   error?: { code?: number | string; message?: unknown };
 };
+
+// A JSON object, or undefined for anything else.
+function parseMessage(raw: Buffer): MistralMessage | undefined {
+  try {
+    const parsed: unknown = JSON.parse(raw.toString());
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as MistralMessage)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 // error.message is a string or an object with details.
 function describeError(error: MistralMessage["error"]): string {

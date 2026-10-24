@@ -66,9 +66,11 @@ function events() {
   const recorded = {
     transcripts: [] as Transcript[],
     errors: [] as Error[],
+    warnings: [] as string[],
     onTranscript: (transcript: Transcript) =>
       recorded.transcripts.push(transcript),
     onError: (error: Error) => recorded.errors.push(error),
+    onWarning: (warning: string) => recorded.warnings.push(warning),
   };
   return recorded;
 }
@@ -267,13 +269,35 @@ test("sends pending text as a final, then reports an unexpected close", async (t
   assert.match(recorded.errors[0]?.message ?? "", /closed the connection/);
 });
 
-test("reports a message it cannot parse", async (t) => {
+test("warns about a message it cannot parse, without its content", async (t) => {
   const { mistral, recorded } = await open(t);
 
-  (await mistral.connection).socket.send("not json");
+  (await mistral.connection).socket.send("secret words");
+  (await mistral.connection).socket.send("42");
+  await mistral.send({ type: "transcription.text.delta", text: "still on" });
   await settle();
 
-  assert.equal(recorded.errors.length, 1);
+  assert.deepEqual(recorded.warnings, [
+    "unparseable message (12 bytes)",
+    "unparseable message (2 bytes)",
+  ]);
+  assert.deepEqual(recorded.errors, []);
+  assert.deepEqual(recorded.transcripts, [{ text: "still on", final: false }]);
+});
+
+test("warns about an unknown message type with the type only", async (t) => {
+  const { mistral, recorded } = await open(t);
+
+  await mistral.send({ type: "transcription.new\nline", text: "secret" });
+  await mistral.send({ text: "secret" });
+  await mistral.send({ type: "session.updated" });
+  await settle();
+
+  assert.deepEqual(recorded.warnings, [
+    'unknown message type "transcription.new\\nline"',
+    'unknown message type "undefined"',
+  ]);
+  assert.deepEqual(recorded.errors, []);
 });
 
 test("reports nothing after close", async (t) => {

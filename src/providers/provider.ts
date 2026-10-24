@@ -10,6 +10,9 @@ export type StreamEvents = {
   // A failure after the stream is open. A failure while opening rejects the
   // promise of OpenStream instead.
   onError: (error: Error) => void;
+  // Something worth a log line that does not end the stream. Never content
+  // such as audio, transcripts or provider messages (architecture.md).
+  onWarning: (warning: string) => void;
 };
 
 // Opens one provider stream for one connection. Events are reported until the

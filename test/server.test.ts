@@ -163,6 +163,7 @@ function fakeProvider() {
     closeThrows: false,
     report: (_transcript: Transcript) => {},
     fail: (_error: Error) => {},
+    warn: (_warning: string) => {},
     open,
     failOpen,
     openStream,
@@ -171,9 +172,11 @@ function fakeProvider() {
   async function openStream({
     onTranscript,
     onError,
+    onWarning,
   }: StreamEvents): Promise<ProviderStream> {
     fake.report = onTranscript;
     fake.fail = onError;
+    fake.warn = onWarning;
     await opened;
     return {
       sendAudio: (chunk) => {
@@ -237,6 +240,25 @@ test("sends error and closes with 1011 when an open stream fails", async (t) => 
   assert.deepEqual(await result, { messages: [PROVIDER_ERROR], code: 1011 });
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(fake.closed, true);
+});
+
+test("logs provider warnings with the session id and keeps the connection", async (t) => {
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+  const warned = t.mock.method(console, "warn", () => {});
+
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ready = nextMessage(ws);
+  fake.open();
+  const { sessionId } = JSON.parse((await ready).data);
+  fake.warn("something odd");
+
+  assert.equal(
+    warned.mock.calls[0].arguments[0],
+    `[${sessionId}] provider: something odd`,
+  );
+  assert.equal(ws.readyState, WebSocket.OPEN);
 });
 
 test("prefixes connection logs with the session id from ready", async (t) => {

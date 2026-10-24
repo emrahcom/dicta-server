@@ -134,6 +134,9 @@ export function createServer({
           }
         }),
         onError: guard(fail),
+        onWarning: guard((warning) =>
+          console.warn(`${tag} provider: ${warning}`),
+        ),
       });
     } catch (err) {
       fail(err);

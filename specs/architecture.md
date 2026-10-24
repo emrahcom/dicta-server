@@ -55,11 +55,13 @@ Message formats are in `contract-protocol.md`.
   no service. For each audio frame it sends an interim with the total bytes
   received so far, and after 1 second without audio a final with the same text.
 - `mistral` uses Mistral's realtime transcription API (Voxtral) over a
-  WebSocket. Audio is forwarded as it is, since Mistral accepts the same PCM
-  format. Each text delta is sent as an interim with the text since the last
-  final. A final is sent when that text ends a sentence, and after 1 second
-  without audio frames, when the server asks Mistral to flush. When Mistral
-  fails, text not yet sent as a final is sent as a final first.
+  WebSocket. The stream is open when Mistral confirms the session with
+  `session.created`, as Mistral's SDK does. Audio is forwarded as it is, since
+  Mistral accepts the same PCM format. Each text delta is sent as an interim
+  with the text since the last final. A final is sent when that text ends a
+  sentence, and after 1 second without audio frames, when the server asks
+  Mistral to flush. When Mistral fails, text not yet sent as a final is sent as
+  a final first.
 - Mistral protocol references. The docs give the endpoint, audio format and
   events:
   https://docs.mistral.ai/studio/audio/speech_to_text/realtime_transcription.md

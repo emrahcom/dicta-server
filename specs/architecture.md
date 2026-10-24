@@ -86,6 +86,8 @@ when it closes. Any instance can serve any user.
 ## Logging
 
 - Logs go to the console.
+- Audio and transcripts are never logged, and neither is the content of provider
+  messages.
 - The session id is created when a connection starts. Every log line about a
   connection starts with it: `[<sessionId>] <message>`.
 - A rejected token is logged with the reason (missing, expired, invalid

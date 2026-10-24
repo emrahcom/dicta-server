@@ -15,7 +15,7 @@ Node.js (current LTS) and TypeScript (strict).
   server, and the source of truth for both repos.
 - Tasks are files in `tasks/open/` and `tasks/done/`, named
   `YYYY-MM-DD-slug.md`. The folder is the status. `specs/tasks.md` defines the
-  format. Out-of-scope findings become task files too.
+  format, including how findings are handled.
 
 ## Verification commands
 

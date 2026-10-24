@@ -18,7 +18,10 @@ wss://<host>/dicta/v1/listen?token=<jwt>
 ## Client to server
 
 Binary frames only: raw audio, PCM signed 16-bit little-endian, 16 kHz, mono.
-Any frame size.
+The client streams audio in small frames while the user speaks, typically every
+20 to 100 ms. A single frame is at most 64 KiB; a larger one closes the
+connection with code `1009`. Audio buffered before `ready` is sent in the same
+small frames, never merged into one.
 
 ## Server to client
 

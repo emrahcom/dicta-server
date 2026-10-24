@@ -37,6 +37,6 @@ Type prefix (`feat`, `fix`, `refactor`, `test`, `docs`, `chore`), subject only,
 no body, no trailers. A task lands as up to three commits:
 
 - `docs: <spec change>`
-- `chore: add task 2026-10-24-142731-jwt-auth`
-- `<type>: implement 2026-10-24-142731-jwt-auth`, with the type that fits the
+- `chore: add task 2026-10-24-150938-jwt-auth`
+- `<type>: implement 2026-10-24-150938-jwt-auth`, with the type that fits the
   change. It also moves the task file to `tasks/done/`.

@@ -41,6 +41,12 @@ Message formats are in `contract-protocol.md`.
 Instances share nothing. All state belongs to an open connection and is gone
 when it closes. Any instance can serve any user.
 
+## Shutdown
+
+On `SIGTERM` or `SIGINT` the server stops accepting connections, closes the
+open ones with code `1001` and exits. It exits after 5 seconds even if some
+sockets have not closed.
+
 ## Configuration
 
 Environment variables:

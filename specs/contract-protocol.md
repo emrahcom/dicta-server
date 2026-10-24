@@ -49,3 +49,6 @@ it never changes, and the next transcript starts new text.
 ## Closing
 
 Either side may close at any time. The client closes when it is done.
+
+Code `1001` from the server means it is shutting down. The client may open a
+new connection, which reaches another instance.

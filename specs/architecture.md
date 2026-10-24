@@ -43,4 +43,6 @@ when it closes. Any instance can serve any user.
 
 ## Configuration
 
-Environment variables.
+Environment variables:
+
+- `PORT`: the port the server listens on. Default `8080`.

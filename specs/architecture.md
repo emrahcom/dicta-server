@@ -71,6 +71,10 @@ when it closes. Any instance can serve any user.
   logged.
 - An accepted connection is logged once as `connected`, with the token's `sub`
   when it has one. No other claim is logged.
+- `sub` is logged in double quotes, escaped like a JSON string, with invisible
+  and control characters as `\uXXXX`, so it cannot break or disguise a log
+  line. It is cut to 128 characters, followed by `...` when longer:
+  `connected sub="user-1"`.
 
 ## Shutdown
 

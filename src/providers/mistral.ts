@@ -57,8 +57,8 @@ export function createMistral({
         }
       };
 
-      // Ends the stream on any failure: before it is open by rejecting the open,
-      // after it by sending the pending text as a final and reporting the error.
+      // Ends the stream on any failure. Before it is open, it rejects the open.
+      // After it, it sends the pending text as a final and reports the error.
       const fail = (err: unknown) => {
         const error = err instanceof Error ? err : new Error(String(err));
         const wasOpen = state === "open";

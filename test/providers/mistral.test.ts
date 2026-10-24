@@ -1,0 +1,288 @@
+import assert from "node:assert/strict";
+import { once } from "node:events";
+import type { IncomingMessage } from "node:http";
+import type { AddressInfo } from "node:net";
+import { type TestContext, test } from "node:test";
+import { type WebSocket, WebSocketServer } from "ws";
+import { createMistral } from "../../src/providers/mistral.ts";
+import type { Transcript } from "../../src/providers/provider.ts";
+
+// A Mistral server inside the test. It records what the provider sends and
+// lets the test decide what to answer.
+async function fakeMistral(t: TestContext, options: { status?: number } = {}) {
+  const wss = new WebSocketServer({
+    port: 0,
+    verifyClient:
+      options.status === undefined
+        ? undefined
+        : (_info, done) => done(false, options.status),
+  });
+  await once(wss, "listening");
+  t.after(
+    () =>
+      new Promise<void>((resolve) => {
+        for (const client of wss.clients) {
+          client.terminate();
+        }
+        wss.close(() => resolve());
+      }),
+  );
+
+  const received: unknown[] = [];
+  const waiting: ((message: unknown) => void)[] = [];
+  const connection = new Promise<{
+    socket: WebSocket;
+    request: IncomingMessage;
+  }>((resolve) => {
+    wss.on("connection", (socket, request) => {
+      socket.on("message", (data) => {
+        const message: unknown = JSON.parse((data as Buffer).toString());
+        const next = waiting.shift();
+        if (next) {
+          next(message);
+        } else {
+          received.push(message);
+        }
+      });
+      resolve({ socket, request });
+    });
+  });
+
+  const { port } = wss.address() as AddressInfo;
+  return {
+    url: `ws://localhost:${port}`,
+    connection,
+    // The next message the provider sent.
+    next: () =>
+      received.length > 0
+        ? Promise.resolve(received.shift())
+        : new Promise<unknown>((resolve) => waiting.push(resolve)),
+    send: async (message: object) =>
+      (await connection).socket.send(JSON.stringify(message)),
+  };
+}
+
+function events() {
+  const recorded = {
+    transcripts: [] as Transcript[],
+    errors: [] as Error[],
+    onTranscript: (transcript: Transcript) =>
+      recorded.transcripts.push(transcript),
+    onError: (error: Error) => recorded.errors.push(error),
+  };
+  return recorded;
+}
+
+// Opens a stream against the fake server and completes the handshake.
+async function open(t: TestContext) {
+  const mistral = await fakeMistral(t);
+  const recorded = events();
+  const opening = createMistral({
+    apiKey: "key",
+    model: "model",
+    url: mistral.url,
+  })(recorded);
+  await mistral.send({ type: "session.created" });
+  const stream = await opening;
+  t.after(() => closeFully(stream, mistral));
+  await mistral.next(); // session.update
+  return { mistral, recorded, stream };
+}
+
+// Closes the stream and waits until the socket is closed on both ends, so no
+// close timer of ws is left running when the next test mocks the timers.
+async function closeFully(
+  stream: { close: () => void },
+  mistral: Awaited<ReturnType<typeof fakeMistral>>,
+) {
+  const { socket } = await mistral.connection;
+  const closed =
+    socket.readyState === socket.CLOSED
+      ? Promise.resolve()
+      : once(socket, "close");
+  stream.close();
+  await closed;
+  await settle();
+}
+
+// Waits until the provider has handled what the server sent before.
+async function settle() {
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+}
+
+test("connects with the model and the API key", async (t) => {
+  const mistral = await fakeMistral(t);
+  void createMistral({ apiKey: "key", model: "a b", url: mistral.url })(
+    events(),
+  ).catch(() => {});
+
+  const { request } = await mistral.connection;
+
+  assert.equal(request.url, "/?model=a%20b");
+  assert.equal(request.headers.authorization, "Bearer key");
+});
+
+test("opens on session.created and then sends the audio format", async (t) => {
+  const mistral = await fakeMistral(t);
+  const opening = createMistral({
+    apiKey: "key",
+    model: "model",
+    url: mistral.url,
+  })(events());
+  await mistral.send({ type: "session.created" });
+  const stream = await opening;
+  t.after(() => closeFully(stream, mistral));
+
+  assert.deepEqual(await mistral.next(), {
+    type: "session.update",
+    session: { audio_format: { encoding: "pcm_s16le", sample_rate: 16000 } },
+  });
+});
+
+test("fails the open on an error before session.created", async (t) => {
+  const mistral = await fakeMistral(t);
+  const opening = createMistral({
+    apiKey: "key",
+    model: "model",
+    url: mistral.url,
+  })(events());
+  await mistral.send({
+    type: "error",
+    error: { code: 1234, message: "bad model" },
+  });
+
+  await assert.rejects(opening, /Mistral error: 1234 bad model/);
+});
+
+test("fails the open when Mistral refuses the connection", async (t) => {
+  const mistral = await fakeMistral(t, { status: 401 });
+  const opening = createMistral({
+    apiKey: "key",
+    model: "model",
+    url: mistral.url,
+  })(events());
+
+  await assert.rejects(opening, /HTTP 401/);
+});
+
+test("fails the open without session.created within 10 seconds", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const mistral = await fakeMistral(t);
+  const opening = createMistral({
+    apiKey: "key",
+    model: "model",
+    url: mistral.url,
+  })(events());
+  await mistral.connection;
+
+  t.mock.timers.tick(10_000);
+
+  await assert.rejects(opening, /no session.created within 10 seconds/);
+});
+
+test("sends audio as base64", async (t) => {
+  const { mistral, stream } = await open(t);
+
+  stream.sendAudio(Buffer.from([1, 2, 3]));
+
+  assert.deepEqual(await mistral.next(), {
+    type: "input_audio.append",
+    audio: "AQID",
+  });
+});
+
+test("reports deltas as interims and a sentence end as a final", async (t) => {
+  const { mistral, recorded } = await open(t);
+
+  for (const text of ["The", " Bir", "ch", ".", " Glue"]) {
+    await mistral.send({ type: "transcription.text.delta", text });
+  }
+  await settle();
+
+  assert.deepEqual(recorded.transcripts, [
+    { text: "The", final: false },
+    { text: "The Bir", final: false },
+    { text: "The Birch", final: false },
+    { text: "The Birch.", final: true },
+    { text: "Glue", final: false },
+  ]);
+});
+
+test("flushes 1 second after the last audio and sends the rest as a final", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { mistral, recorded, stream } = await open(t);
+
+  stream.sendAudio(Buffer.from([1]));
+  await mistral.next(); // input_audio.append
+  t.mock.timers.tick(999);
+  stream.sendAudio(Buffer.from([2]));
+  await mistral.next(); // input_audio.append
+  t.mock.timers.tick(1000);
+
+  assert.deepEqual(await mistral.next(), { type: "input_audio.flush" });
+
+  await mistral.send({ type: "transcription.text.delta", text: "add a note" });
+  await mistral.send({ type: "transcription.done" });
+  await settle();
+
+  assert.deepEqual(recorded.transcripts.at(-1), {
+    text: "add a note",
+    final: true,
+  });
+});
+
+test("sends pending text as a final, then reports a Mistral error", async (t) => {
+  const { mistral, recorded } = await open(t);
+
+  await mistral.send({ type: "transcription.text.delta", text: "add a" });
+  await mistral.send({
+    type: "error",
+    error: { code: 3804, message: { detail: "idle" } },
+  });
+  await settle();
+
+  assert.deepEqual(recorded.transcripts.at(-1), {
+    text: "add a",
+    final: true,
+  });
+  assert.equal(
+    recorded.errors[0]?.message,
+    'Mistral error: 3804 {"detail":"idle"}',
+  );
+});
+
+test("sends pending text as a final, then reports an unexpected close", async (t) => {
+  const { mistral, recorded } = await open(t);
+
+  await mistral.send({ type: "transcription.text.delta", text: "add a" });
+  (await mistral.connection).socket.close(1011);
+  await once((await mistral.connection).socket, "close");
+  await settle();
+
+  assert.deepEqual(recorded.transcripts.at(-1), {
+    text: "add a",
+    final: true,
+  });
+  assert.match(recorded.errors[0]?.message ?? "", /closed the connection/);
+});
+
+test("reports a message it cannot parse", async (t) => {
+  const { mistral, recorded } = await open(t);
+
+  (await mistral.connection).socket.send("not json");
+  await settle();
+
+  assert.equal(recorded.errors.length, 1);
+});
+
+test("reports nothing after close", async (t) => {
+  const { mistral, recorded, stream } = await open(t);
+
+  stream.close();
+  await mistral.send({ type: "transcription.text.delta", text: "late" });
+  await settle();
+
+  assert.deepEqual(recorded.transcripts, []);
+  assert.deepEqual(recorded.errors, []);
+});

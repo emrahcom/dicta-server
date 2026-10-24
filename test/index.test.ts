@@ -6,7 +6,13 @@ import { test } from "node:test";
 const SECRET = "s".repeat(32);
 
 function startIndex(env: Record<string, string>) {
-  const { JWT_SECRET, ALLOW_UNAUTHENTICATED, PROVIDER, ...rest } = process.env;
+  const {
+    JWT_SECRET,
+    ALLOW_UNAUTHENTICATED,
+    PROVIDER,
+    MISTRAL_API_KEY,
+    ...rest
+  } = process.env;
   return spawn("node", ["src/index.ts"], {
     env: { ...rest, PORT: "0", ...env },
   });
@@ -59,4 +65,12 @@ test("exits at startup with a JWT_SECRET shorter than 32 bytes", async () => {
     PROVIDER: "stub",
   });
   assert.match(stderr, /JWT_SECRET must be at least 32 bytes/);
+});
+
+test("exits at startup with PROVIDER=mistral and no MISTRAL_API_KEY", async () => {
+  const stderr = await exitWithError({
+    JWT_SECRET: SECRET,
+    PROVIDER: "mistral",
+  });
+  assert.match(stderr, /MISTRAL_API_KEY is required when PROVIDER=mistral/);
 });

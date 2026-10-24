@@ -1,4 +1,5 @@
 import { getProvider, providerNames } from "./providers/index.ts";
+import type { OpenStream } from "./providers/provider.ts";
 import { createServer, type AuthOptions } from "./server.ts";
 
 const SHUTDOWN_TIMEOUT_MS = 5000;
@@ -21,9 +22,16 @@ if (process.env.ALLOW_UNAUTHENTICATED === "true") {
   auth = { jwtSecret: process.env.JWT_SECRET };
 }
 
-const openStream = getProvider(process.env.PROVIDER);
-if (!openStream) {
+const createProvider = getProvider(process.env.PROVIDER);
+if (!createProvider) {
   console.error(`PROVIDER must be one of: ${providerNames.join(", ")}`);
+  process.exit(1);
+}
+let openStream: OpenStream;
+try {
+  openStream = createProvider(process.env);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 }
 

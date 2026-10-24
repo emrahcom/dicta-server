@@ -13,7 +13,8 @@ wss://<host>/dicta/v1/listen?token=<jwt>
 - `token` is the JWT issued by the application's backend. It is a query
   parameter because browsers cannot set headers on a WebSocket. The server must
   not log it.
-- An invalid or expired token: the server closes the socket with code `4001`.
+- A missing, invalid or expired token: the server closes the socket with code
+  `4001`.
 
 ## Client to server
 
@@ -43,8 +44,9 @@ it never changes, and the next transcript starts new text.
 { "type": "transcript", "text": "add a note", "final": false }
 ```
 
-`error`, sent before the server closes the socket with code `1011`. It can come
-before `ready` when the speech-to-text provider cannot be reached.
+`error`, sent when the speech-to-text provider fails, before the server closes
+the socket with code `1011`. It can come before `ready` when the provider cannot
+be reached.
 
 ```json
 { "type": "error", "message": "..." }
@@ -57,6 +59,9 @@ Either side may close at any time. The client closes when it is done.
 The server sends a WebSocket ping every 30 seconds. A client that does not
 answer with a pong before the next ping is disconnected. Browsers and common
 WebSocket libraries answer pings automatically.
+
+Code `1011` from the server means a server-side failure. It may come without an
+`error` message.
 
 Code `1001` from the server means it is shutting down. The client may open a
 new connection, which reaches another instance.

@@ -35,7 +35,7 @@ Message formats are in `contract-protocol.md`.
 - HS256 with a shared secret (`JWT_SECRET`). The `jose` package verifies it.
 - `exp` is required. `sub` is optional and identifies the user.
 - The upgrade is accepted before the token is checked, so the client can read
-  the `4001` close code. `ready` is sent only after the token is accepted.
+  the `4001` close code.
 
 ## Providers
 
@@ -75,8 +75,8 @@ when it closes. Any instance can serve any user.
 - The session id is created when a connection starts. Every log line about a
   connection starts with it: `[<sessionId>] <message>`.
 - A rejected token is logged with the reason (missing, expired, invalid
-  signature, missing `exp`). Neither the token nor anything decoded from it is
-  logged.
+  signature, missing `exp`, or invalid for anything else). Neither the token
+  nor anything decoded from it is logged.
 - An accepted connection is logged once as `connected`, with the token's `sub`
   when it has one. No other claim is logged.
 - `sub` is logged in double quotes, escaped like a JSON string, with invisible
@@ -95,8 +95,9 @@ sockets have not closed.
 Environment variables:
 
 - `PORT`: the port the server listens on. Default `8080`.
-- `JWT_SECRET`: the shared secret for tokens. Required; the server does not
-  start without it, unless `ALLOW_UNAUTHENTICATED` is `true`.
+- `JWT_SECRET`: the shared secret for tokens, at least 32 bytes (RFC 7518).
+  Required; the server does not start without it or with a shorter one, unless
+  `ALLOW_UNAUTHENTICATED` is `true`.
 - `ALLOW_UNAUTHENTICATED`: when `true`, tokens are not checked at all. For
   development only. Default `false`. The server logs a warning at startup when
   it is on.

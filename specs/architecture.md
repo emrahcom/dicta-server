@@ -51,6 +51,11 @@ Message formats are in `contract-protocol.md`.
   bytes received so far, and after 1 second without audio a final with the
   same text.
 
+## Unexpected errors
+
+An unexpected error in a connection is logged and closes that connection with
+`1011`. The process keeps running.
+
 ## State
 
 Instances share nothing. All state belongs to an open connection and is gone

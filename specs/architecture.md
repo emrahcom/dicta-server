@@ -91,16 +91,16 @@ Message formats are in `contract-protocol.md`.
 - The stream is open when the WebSocket opens.
 - Audio is forwarded as it is.
 - The language tag is sent as it is, and without one the language is English.
-  When Deepgram refuses a tag with a region or script (`de-BE`), the server
-  opens again with its language code (`de`). A language Deepgram does not
-  support at all fails the open.
+  When Deepgram refuses a tag with a region or script (`de-BE`) with HTTP 400,
+  the server opens again with its language code (`de`). A language Deepgram does
+  not support at all fails the open.
 - Deepgram sends results per segment. Finished segments are collected, and each
   result is sent as an interim with the collected text and the current segment.
 - A final is sent when Deepgram marks the end of speech (`speech_final`) or
   answers a `Finalize`, which the server sends after 1 second without audio
   frames.
 - A `KeepAlive` every 4 seconds keeps the stream open, since Deepgram closes it
-  after 10 seconds without audio. On close the server sends `CloseStream`.
+  after 10 seconds without audio.
 - When Deepgram fails, collected text is sent as a final first.
 - Deepgram's `Error` messages are not fatal and are logged as warnings; fatal
   problems close the socket and count as a failure.
@@ -135,7 +135,7 @@ when it closes. Any instance can serve any user.
   signature, missing `exp`, or invalid for anything else). Neither the token nor
   anything decoded from it is logged.
 - An accepted connection is logged once as `connected`, with the token's `sub`
-  when it has one. No other claim is logged.
+  when it has one as a string. No other claim is logged.
 - `sub` is logged in double quotes, escaped like a JSON string, with invisible
   and control characters as `\uXXXX`, so it cannot break or disguise a log line.
   It is cut to 128 characters, followed by `...` when longer:

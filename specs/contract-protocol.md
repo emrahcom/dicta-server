@@ -27,7 +27,8 @@ The client streams audio in small frames while the user speaks, typically every
 push-to-talk is held, and stops when the user stops speaking. The server sends
 the final transcript about 1 second after the audio stops. A single frame is at
 most 64 KiB; a larger one closes the connection with code `1009`. Audio buffered
-before `ready` is sent in the same small frames, never merged into one.
+before `ready` is sent in the same small frames, never merged into one. The
+server ignores text frames, and audio that arrives before `ready`.
 
 ## Server to client
 

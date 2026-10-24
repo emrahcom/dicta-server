@@ -5,7 +5,7 @@ running `dicta-js` stream microphone audio over a WebSocket. The server checks
 the user's token, forwards the audio to a speech-to-text provider and sends the
 transcripts back.
 
-Node.js (current LTS) and TypeScript (strict).
+Node.js 24 or later and TypeScript (strict).
 
 ## Specs and tasks
 

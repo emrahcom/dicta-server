@@ -5,6 +5,7 @@ import { jwtVerify } from 'jose';
 import { WebSocketServer } from 'ws';
 
 const LISTEN_PATH = '/dicta/v1/listen';
+const MAX_FRAME_BYTES = 64 * 1024;
 
 export type AuthOptions = { jwtSecret: string } | { allowUnauthenticated: true };
 
@@ -16,7 +17,7 @@ export function createServer(auth: AuthOptions): {
   const server = createHttpServer((_req, res) => {
     res.writeHead(404).end();
   });
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
 
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '', 'http://localhost');
@@ -27,6 +28,9 @@ export function createServer(auth: AuthOptions): {
     // The upgrade is accepted before the token check, so the client can read
     // the 4001 close code.
     wss.handleUpgrade(req, socket, head, async (ws) => {
+      // Without a listener, a protocol error (for example a too large frame)
+      // would crash the process. ws closes the connection itself.
+      ws.on('error', (err) => console.warn(`connection error: ${err.message}`));
       if (secret && !(await isValidToken(url.searchParams.get('token'), secret))) {
         ws.close(4001);
         return;

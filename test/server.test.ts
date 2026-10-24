@@ -94,6 +94,36 @@ test('sends ready without a token when unauthenticated is allowed', async (t) =>
   assert.equal(message.type, 'ready');
 });
 
+test('accepts a 64 KiB frame', async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  await nextMessage(ws);
+  let closed = false;
+  ws.onclose = () => (closed = true);
+  ws.send(new Uint8Array(64 * 1024));
+  // The server does not answer audio, so wait briefly for a close that should
+  // not come.
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  assert.equal(closed, false);
+});
+
+test('closes with 1009 when a frame is larger than 64 KiB', async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  await nextMessage(ws);
+  const closed = new Promise<CloseEvent>((resolve) => {
+    ws.onclose = resolve;
+  });
+  ws.send(new Uint8Array(64 * 1024 + 1));
+
+  assert.equal((await closed).code, 1009);
+});
+
 test('rejects other paths', async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);

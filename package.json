@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node src/index.ts",
     "check": "tsc",
-    "test": "node --test \"test/**/*.test.ts\""
+    "test": "node --test --test-timeout=5000 \"test/**/*.test.ts\""
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

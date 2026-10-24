@@ -160,6 +160,7 @@ function fakeProvider() {
     chunks: [] as Buffer[],
     closed: false,
     sendAudioThrows: false,
+    closeThrows: false,
     report: (_transcript: Transcript) => {},
     fail: (_error: Error) => {},
     open,
@@ -181,7 +182,12 @@ function fakeProvider() {
         }
         fake.chunks.push(chunk);
       },
-      close: () => (fake.closed = true),
+      close: () => {
+        fake.closed = true;
+        if (fake.closeThrows) {
+          throw new Error("close failed");
+        }
+      },
     };
   }
 
@@ -292,6 +298,62 @@ test("closes with 1011 and keeps serving after an unexpected error", async (t) =
   );
   const second = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
   assert.equal(JSON.parse((await nextMessage(second)).data).type, "ready");
+});
+
+test("closes with 1011 when sending a transcript throws", async (t) => {
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+  const logged = t.mock.method(console, "error", () => {});
+
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ready = nextMessage(ws);
+  fake.open();
+  await ready;
+  const result = untilClose(ws);
+  const stringify = JSON.stringify;
+  const broken = t.mock.method(JSON, "stringify", (value: unknown) => {
+    if ((value as { type?: string }).type === "transcript") {
+      throw new Error("unexpected");
+    }
+    return stringify(value);
+  });
+  fake.report({ text: "hello", final: true });
+  broken.mock.restore();
+
+  assert.deepEqual(await result, { messages: [], code: 1011 });
+  assert.match(
+    logged.mock.calls[0].arguments[0],
+    /^\[[0-9a-f-]+\] unexpected error: unexpected$/,
+  );
+});
+
+test("keeps serving when closing the provider stream throws", async (t) => {
+  const failing = fakeProvider();
+  failing.closeThrows = true;
+  const fakes = [failing, fakeProvider()];
+  const { base, shutdown } = await start({
+    openStream: (events) => fakes.shift()!.openStream(events),
+  });
+  t.after(shutdown);
+  const logged = t.mock.method(console, "error", () => {});
+
+  const first = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ready = nextMessage(first);
+  failing.open();
+  await ready;
+  first.close();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.equal(failing.closed, true);
+  assert.match(
+    logged.mock.calls[0].arguments[0],
+    /^\[[0-9a-f-]+\] unexpected error: close failed$/,
+  );
+  const second = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const secondReady = nextMessage(second);
+  fakes[0].open();
+  assert.equal(JSON.parse((await secondReady).data).type, "ready");
 });
 
 test("a failing connection does not affect another one", async (t) => {

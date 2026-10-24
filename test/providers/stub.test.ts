@@ -37,3 +37,24 @@ test("sends no final after close", async (t) => {
 
   assert.deepEqual(transcripts, [{ text: "10 bytes", final: false }]);
 });
+
+test("reports an error thrown while sending the final", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const errors: Error[] = [];
+  const stream = await openStubStream({
+    onTranscript: (transcript) => {
+      if (transcript.final) {
+        throw new Error("final failed");
+      }
+    },
+    onError: (error) => errors.push(error),
+  });
+
+  stream.sendAudio(Buffer.alloc(10));
+  t.mock.timers.tick(1000);
+
+  assert.deepEqual(
+    errors.map((error) => error.message),
+    ["final failed"],
+  );
+});

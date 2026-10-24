@@ -4,7 +4,7 @@ const FINAL_AFTER_MS = 1000;
 
 // Reports the total bytes received as an interim for each frame, and as a final
 // after a second without audio. Calls no service.
-export const openStubStream: OpenStream = async ({ onTranscript }) => {
+export const openStubStream: OpenStream = async ({ onTranscript, onError }) => {
   let bytes = 0;
   let finalTimer: NodeJS.Timeout | undefined;
 
@@ -14,10 +14,14 @@ export const openStubStream: OpenStream = async ({ onTranscript }) => {
       const text = `${bytes} bytes`;
       onTranscript({ text, final: false });
       clearTimeout(finalTimer);
-      finalTimer = setTimeout(
-        () => onTranscript({ text, final: true }),
-        FINAL_AFTER_MS,
-      );
+      // An error thrown in a timer would escape to the event loop.
+      finalTimer = setTimeout(() => {
+        try {
+          onTranscript({ text, final: true });
+        } catch (err) {
+          onError(err instanceof Error ? err : new Error(String(err)));
+        }
+      }, FINAL_AFTER_MS);
     },
     close() {
       clearTimeout(finalTimer);

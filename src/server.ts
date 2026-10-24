@@ -49,14 +49,15 @@ export function createServer({
       ws.on("error", (err) =>
         console.warn(`${tag} connection error: ${err.message}`),
       );
-      // ws ignores the callback's return value, so an error left in this
-      // promise would crash the process.
-      handleConnection(ws, url, sessionId).catch((err: unknown) => {
+      const unexpected = (err: unknown) => {
         console.error(`${tag} unexpected error: ${errorMessage(err)}`);
         if (ws.readyState === ws.OPEN) {
           ws.close(1011);
         }
-      });
+      };
+      // ws ignores the callback's return value, so an error left in this
+      // promise would crash the process.
+      handleConnection(ws, url, sessionId, unexpected).catch(unexpected);
     });
   });
 
@@ -64,8 +65,20 @@ export function createServer({
     ws: WebSocket,
     url: URL,
     sessionId: string,
+    unexpected: (err: unknown) => void,
   ): Promise<void> {
     const tag = `[${sessionId}]`;
+    // An error thrown in an event handler or callback would escape to the
+    // event loop and crash the process. This keeps it in the connection.
+    const guard =
+      <A extends unknown[]>(handler: (...args: A) => void) =>
+      (...args: A) => {
+        try {
+          handler(...args);
+        } catch (err) {
+          unexpected(err);
+        }
+      };
 
     let sub: string | undefined;
     if (secret) {
@@ -98,12 +111,12 @@ export function createServer({
     let stream: ProviderStream;
     try {
       stream = await openStream({
-        onTranscript: (transcript) => {
+        onTranscript: guard((transcript) => {
           if (ws.readyState === ws.OPEN) {
             ws.send(JSON.stringify({ type: "transcript", ...transcript }));
           }
-        },
-        onError: fail,
+        }),
+        onError: guard(fail),
       });
     } catch (err) {
       fail(err);
@@ -113,17 +126,23 @@ export function createServer({
       stream.close();
       return;
     }
-    ws.on("close", () => stream.close());
-    ws.on("message", (data, isBinary) => {
-      if (!isBinary) {
-        return;
-      }
-      try {
-        stream.sendAudio(data as Buffer);
-      } catch (err) {
-        fail(err);
-      }
-    });
+    ws.on(
+      "close",
+      guard(() => stream.close()),
+    );
+    ws.on(
+      "message",
+      guard((data, isBinary) => {
+        if (!isBinary) {
+          return;
+        }
+        try {
+          stream.sendAudio(data as Buffer);
+        } catch (err) {
+          fail(err);
+        }
+      }),
+    );
     ws.send(JSON.stringify({ type: "ready", sessionId }));
   }
 

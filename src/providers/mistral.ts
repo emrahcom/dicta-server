@@ -12,7 +12,7 @@
 // fragments with their leading spaces ("The", " Bir", "ch", ".").
 
 import WebSocket from "ws";
-import { quoteForLog } from "../logging.ts";
+import { parseMessage, unknownTypeWarning } from "./messages.ts";
 import type { OpenStream, ProviderStream } from "./provider.ts";
 
 export const MISTRAL_DEFAULT_MODEL = "voxtral-mini-transcribe-realtime-3";
@@ -140,9 +140,7 @@ export function createMistral({
           case "session.updated":
             break;
           default:
-            onWarning(
-              `unknown message type ${quoteForLog(String(message.type))}`,
-            );
+            onWarning(unknownTypeWarning(message.type));
         }
       };
 
@@ -162,7 +160,7 @@ export function createMistral({
         }
         try {
           const raw = data as Buffer;
-          const message = parseMessage(raw);
+          const message = parseMessage<MistralMessage>(raw);
           if (message === undefined) {
             onWarning(`unparseable message (${raw.length} bytes)`);
             return;
@@ -180,18 +178,6 @@ type MistralMessage = {
   text?: string;
   error?: { code?: number | string; message?: unknown };
 };
-
-// A JSON object, or undefined for anything else.
-function parseMessage(raw: Buffer): MistralMessage | undefined {
-  try {
-    const parsed: unknown = JSON.parse(raw.toString());
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as MistralMessage)
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 // error.message is a string or an object with details.
 function describeError(error: MistralMessage["error"]): string {

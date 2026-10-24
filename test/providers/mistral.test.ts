@@ -1,83 +1,12 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import type { IncomingMessage } from "node:http";
-import type { AddressInfo } from "node:net";
 import { type TestContext, test } from "node:test";
-import { type WebSocket, WebSocketServer } from "ws";
 import { createMistral } from "../../src/providers/mistral.ts";
-import type { Transcript } from "../../src/providers/provider.ts";
-
-// A Mistral server inside the test. It records what the provider sends and
-// lets the test decide what to answer.
-async function fakeMistral(t: TestContext, options: { status?: number } = {}) {
-  const wss = new WebSocketServer({
-    port: 0,
-    verifyClient:
-      options.status === undefined
-        ? undefined
-        : (_info, done) => done(false, options.status),
-  });
-  await once(wss, "listening");
-  t.after(
-    () =>
-      new Promise<void>((resolve) => {
-        for (const client of wss.clients) {
-          client.terminate();
-        }
-        wss.close(() => resolve());
-      }),
-  );
-
-  const received: unknown[] = [];
-  const waiting: ((message: unknown) => void)[] = [];
-  const connection = new Promise<{
-    socket: WebSocket;
-    request: IncomingMessage;
-  }>((resolve) => {
-    wss.on("connection", (socket, request) => {
-      socket.on("message", (data) => {
-        const message: unknown = JSON.parse((data as Buffer).toString());
-        const next = waiting.shift();
-        if (next) {
-          next(message);
-        } else {
-          received.push(message);
-        }
-      });
-      resolve({ socket, request });
-    });
-  });
-
-  const { port } = wss.address() as AddressInfo;
-  return {
-    url: `ws://localhost:${port}`,
-    connection,
-    // The next message the provider sent.
-    next: () =>
-      received.length > 0
-        ? Promise.resolve(received.shift())
-        : new Promise<unknown>((resolve) => waiting.push(resolve)),
-    send: async (message: object) =>
-      (await connection).socket.send(JSON.stringify(message)),
-  };
-}
-
-function events() {
-  const recorded = {
-    transcripts: [] as Transcript[],
-    errors: [] as Error[],
-    warnings: [] as string[],
-    onTranscript: (transcript: Transcript) =>
-      recorded.transcripts.push(transcript),
-    onError: (error: Error) => recorded.errors.push(error),
-    onWarning: (warning: string) => recorded.warnings.push(warning),
-  };
-  return recorded;
-}
+import { closeFully, events, fakeServer, settle } from "./helpers.ts";
 
 // Opens a stream against the fake server and completes the handshake.
 async function open(t: TestContext) {
-  const mistral = await fakeMistral(t);
+  const mistral = await fakeServer(t);
   const recorded = events();
   const opening = createMistral({
     apiKey: "key",
@@ -91,30 +20,8 @@ async function open(t: TestContext) {
   return { mistral, recorded, stream };
 }
 
-// Closes the stream and waits until the socket is closed on both ends, so no
-// close timer of ws is left running when the next test mocks the timers.
-async function closeFully(
-  stream: { close: () => void },
-  mistral: Awaited<ReturnType<typeof fakeMistral>>,
-) {
-  const { socket } = await mistral.connection;
-  const closed =
-    socket.readyState === socket.CLOSED
-      ? Promise.resolve()
-      : once(socket, "close");
-  stream.close();
-  await closed;
-  await settle();
-}
-
-// Waits until the provider has handled what the server sent before.
-async function settle() {
-  await new Promise((resolve) => setImmediate(resolve));
-  await new Promise((resolve) => setImmediate(resolve));
-}
-
 test("connects with the model and the API key", async (t) => {
-  const mistral = await fakeMistral(t);
+  const mistral = await fakeServer(t);
   void createMistral({ apiKey: "key", model: "a b", url: mistral.url })(
     events(),
     {},
@@ -127,7 +34,7 @@ test("connects with the model and the API key", async (t) => {
 });
 
 test("opens on session.created and then sends the audio format", async (t) => {
-  const mistral = await fakeMistral(t);
+  const mistral = await fakeServer(t);
   const opening = createMistral({
     apiKey: "key",
     model: "model",
@@ -152,7 +59,7 @@ const languageCases: { lang: string; language: string | undefined }[] = [
 
 for (const { lang, language } of languageCases) {
   test(`sends language ${String(language)} for lang ${lang}`, async (t) => {
-    const mistral = await fakeMistral(t);
+    const mistral = await fakeServer(t);
     const opening = createMistral({
       apiKey: "key",
       model: "model",
@@ -171,7 +78,7 @@ for (const { lang, language } of languageCases) {
 }
 
 test("fails the open on an error before session.created", async (t) => {
-  const mistral = await fakeMistral(t);
+  const mistral = await fakeServer(t);
   const opening = createMistral({
     apiKey: "key",
     model: "model",
@@ -186,7 +93,7 @@ test("fails the open on an error before session.created", async (t) => {
 });
 
 test("fails the open when Mistral refuses the connection", async (t) => {
-  const mistral = await fakeMistral(t, { status: 401 });
+  const mistral = await fakeServer(t, { refuse: () => 401 });
   const opening = createMistral({
     apiKey: "key",
     model: "model",
@@ -198,7 +105,7 @@ test("fails the open when Mistral refuses the connection", async (t) => {
 
 test("fails the open without session.created within 10 seconds", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const mistral = await fakeMistral(t);
+  const mistral = await fakeServer(t);
   const opening = createMistral({
     apiKey: "key",
     model: "model",

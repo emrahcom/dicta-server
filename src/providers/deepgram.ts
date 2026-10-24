@@ -13,6 +13,7 @@
 
 import WebSocket from "ws";
 import { quoteForLog } from "../logging.ts";
+import { parseMessage, unknownTypeWarning } from "./messages.ts";
 import type { OpenStream, ProviderStream, StreamEvents } from "./provider.ts";
 
 export const DEEPGRAM_DEFAULT_MODEL = "nova-3";
@@ -165,9 +166,7 @@ export function createDeepgram({
           case "UtteranceEnd":
             break;
           default:
-            onWarning(
-              `unknown message type ${quoteForLog(String(message.type))}`,
-            );
+            onWarning(unknownTypeWarning(message.type));
         }
       };
 
@@ -201,7 +200,9 @@ export function createDeepgram({
         }
         try {
           const raw = data as Buffer;
-          const message = isBinary ? undefined : parseMessage(raw);
+          const message = isBinary
+            ? undefined
+            : parseMessage<DeepgramMessage>(raw);
           if (message === undefined) {
             onWarning(`unparseable message (${raw.length} bytes)`);
             return;
@@ -255,18 +256,6 @@ type DeepgramMessage = {
   description?: unknown;
   message?: unknown;
 };
-
-// A JSON object, or undefined for anything else.
-function parseMessage(raw: Buffer): DeepgramMessage | undefined {
-  try {
-    const parsed: unknown = JSON.parse(raw.toString());
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as DeepgramMessage)
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 // Deepgram's own description of an error, never other message content.
 function describeError(message: DeepgramMessage): string {

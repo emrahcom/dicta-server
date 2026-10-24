@@ -3,13 +3,14 @@ import { once } from 'node:events';
 import { createServer as createHttpServer, type Server } from 'node:http';
 import { jwtVerify } from 'jose';
 import { WebSocketServer } from 'ws';
+import type { OpenStream } from './providers/provider.ts';
 
 const LISTEN_PATH = '/dicta/v1/listen';
 const MAX_FRAME_BYTES = 64 * 1024;
 
 export type AuthOptions = { jwtSecret: string } | { allowUnauthenticated: true };
 
-export function createServer(auth: AuthOptions): {
+export function createServer({ auth, openStream }: { auth: AuthOptions; openStream: OpenStream }): {
   server: Server;
   shutdown: () => Promise<void>;
 } {
@@ -38,6 +39,22 @@ export function createServer(auth: AuthOptions): {
       if (ws.readyState !== ws.OPEN) {
         return;
       }
+
+      const stream = await openStream((transcript) => {
+        if (ws.readyState === ws.OPEN) {
+          ws.send(JSON.stringify({ type: 'transcript', ...transcript }));
+        }
+      });
+      if (ws.readyState !== ws.OPEN) {
+        stream.close();
+        return;
+      }
+      ws.on('close', () => stream.close());
+      ws.on('message', (data, isBinary) => {
+        if (isBinary) {
+          stream.sendAudio(data as Buffer);
+        }
+      });
       ws.send(JSON.stringify({ type: 'ready', sessionId: randomUUID() }));
     });
   });

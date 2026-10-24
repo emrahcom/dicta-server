@@ -1,3 +1,4 @@
+import { getProvider, providerNames } from './providers/index.ts';
 import { createServer, type AuthOptions } from './server.ts';
 
 const SHUTDOWN_TIMEOUT_MS = 5000;
@@ -15,7 +16,13 @@ if (process.env.ALLOW_UNAUTHENTICATED === 'true') {
   process.exit(1);
 }
 
-const { server, shutdown } = createServer(auth);
+const openStream = getProvider(process.env.PROVIDER);
+if (!openStream) {
+  console.error(`PROVIDER must be one of: ${providerNames.join(', ')}`);
+  process.exit(1);
+}
+
+const { server, shutdown } = createServer({ auth, openStream });
 
 server.listen(port, () => {
   console.log(`dicta-server listening on port ${port}`);

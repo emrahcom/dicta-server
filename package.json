@@ -13,7 +13,8 @@
     "format": "prettier --write .",
     "lint": "oxlint --type-aware --deny-warnings",
     "lint:fix": "oxlint --type-aware --fix",
-    "test": "node --test --test-timeout=5000 \"test/**/*.test.ts\""
+    "test": "node --test --test-timeout=5000 \"test/**/*.test.ts\"",
+    "test:live": "node --test \"test/live/*.live.ts\""
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

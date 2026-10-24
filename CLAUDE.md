@@ -27,6 +27,9 @@ Run them after every change.
 
 `npm run format` fixes formatting.
 
+Optional, against the real Mistral API: `npm run test:live` with
+`MISTRAL_API_KEY` set. Run it before a release or when Mistral may have changed.
+
 ## Commits
 
 Type prefix (`feat`, `fix`, `refactor`, `test`, `docs`, `chore`), subject only,

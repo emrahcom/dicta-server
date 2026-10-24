@@ -1,4 +1,4 @@
-import type { OpenStream } from './provider.ts';
+import type { OpenStream } from "./provider.ts";
 
 const FINAL_AFTER_MS = 1000;
 
@@ -14,7 +14,10 @@ export const openStubStream: OpenStream = async ({ onTranscript }) => {
       const text = `${bytes} bytes`;
       onTranscript({ text, final: false });
       clearTimeout(finalTimer);
-      finalTimer = setTimeout(() => onTranscript({ text, final: true }), FINAL_AFTER_MS);
+      finalTimer = setTimeout(
+        () => onTranscript({ text, final: true }),
+        FINAL_AFTER_MS,
+      );
     },
     close() {
       clearTimeout(finalTimer);

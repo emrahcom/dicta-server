@@ -9,12 +9,18 @@
   },
   "scripts": {
     "start": "node src/index.ts",
-    "check": "tsc",
+    "check": "prettier --check . && tsc",
+    "format": "prettier --write .",
+    "lint": "oxlint --type-aware --deny-warnings",
+    "lint:fix": "oxlint --type-aware --fix",
     "test": "node --test --test-timeout=5000 \"test/**/*.test.ts\""
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
     "@types/ws": "^8.18.2",
+    "oxlint": "^1.89.0",
+    "oxlint-tsgolint": "^7.0.2005",
+    "prettier": "^3.9.10",
     "typescript": "^7.0.2"
   },
   "dependencies": {

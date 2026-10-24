@@ -1,17 +1,17 @@
-import assert from 'node:assert/strict';
-import type { AddressInfo } from 'node:net';
-import { test } from 'node:test';
-import { SignJWT } from 'jose';
+import assert from "node:assert/strict";
+import type { AddressInfo } from "node:net";
+import { test } from "node:test";
+import { SignJWT } from "jose";
 import type {
   OpenStream,
   ProviderStream,
   StreamEvents,
   Transcript,
-} from '../src/providers/provider.ts';
-import { openStubStream } from '../src/providers/stub.ts';
-import { createServer, type AuthOptions } from '../src/server.ts';
+} from "../src/providers/provider.ts";
+import { openStubStream } from "../src/providers/stub.ts";
+import { createServer, type AuthOptions } from "../src/server.ts";
 
-const SECRET = 'test-secret';
+const SECRET = "test-secret";
 
 async function start(
   options: { auth?: AuthOptions; openStream?: OpenStream } = {},
@@ -28,11 +28,11 @@ async function start(
 function sign(
   options: { secret?: string; exp?: string | number | null; sub?: string } = {},
 ): Promise<string> {
-  const jwt = new SignJWT({}).setProtectedHeader({ alg: 'HS256' });
+  const jwt = new SignJWT({}).setProtectedHeader({ alg: "HS256" });
   if (options.sub !== undefined) {
     jwt.setSubject(options.sub);
   }
-  const exp = options.exp === undefined ? '1h' : options.exp;
+  const exp = options.exp === undefined ? "1h" : options.exp;
   if (exp !== null) {
     jwt.setExpirationTime(exp);
   }
@@ -49,64 +49,85 @@ function nextMessage(ws: WebSocket): Promise<MessageEvent> {
 function closeCode(ws: WebSocket): Promise<number> {
   return new Promise((resolve, reject) => {
     ws.onclose = (event) => resolve(event.code);
-    ws.onmessage = (event) => reject(new Error(`unexpected message: ${event.data}`));
+    ws.onmessage = (event) =>
+      reject(new Error(`unexpected message: ${event.data}`));
   });
 }
 
-test('sends ready with a session id for a valid token', async (t) => {
+test("sends ready with a session id for a valid token", async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);
 
   const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
   const message = JSON.parse((await nextMessage(ws)).data);
 
-  assert.equal(message.type, 'ready');
-  assert.equal(typeof message.sessionId, 'string');
-  assert.notEqual(message.sessionId, '');
+  assert.equal(message.type, "ready");
+  assert.equal(typeof message.sessionId, "string");
+  assert.notEqual(message.sessionId, "");
 });
 
-const rejections: { name: string; token: () => Promise<string | null>; reason: string }[] = [
-  { name: 'missing', token: async () => null, reason: 'missing' },
-  { name: 'signed with another secret', token: () => sign({ secret: 'other' }), reason: 'invalid signature' },
+const rejections: {
+  name: string;
+  token: () => Promise<string | null>;
+  reason: string;
+}[] = [
+  { name: "missing", token: async () => null, reason: "missing" },
   {
-    name: 'expired',
-    token: () => sign({ exp: Math.floor(Date.now() / 1000) - 60 }),
-    reason: 'expired',
+    name: "signed with another secret",
+    token: () => sign({ secret: "other" }),
+    reason: "invalid signature",
   },
-  { name: 'without exp', token: () => sign({ exp: null }), reason: 'missing exp' },
-  { name: 'malformed', token: async () => 'not-a-jwt', reason: 'invalid' },
+  {
+    name: "expired",
+    token: () => sign({ exp: Math.floor(Date.now() / 1000) - 60 }),
+    reason: "expired",
+  },
+  {
+    name: "without exp",
+    token: () => sign({ exp: null }),
+    reason: "missing exp",
+  },
+  { name: "malformed", token: async () => "not-a-jwt", reason: "invalid" },
 ];
 
 for (const { name, token, reason } of rejections) {
   test(`closes with 4001 and logs the reason when the token is ${name}`, async (t) => {
     const { base, shutdown } = await start();
     t.after(shutdown);
-    const warned = t.mock.method(console, 'warn', () => {});
+    const warned = t.mock.method(console, "warn", () => {});
 
     const value = await token();
-    const query = value === null ? '' : `?token=${value}`;
+    const query = value === null ? "" : `?token=${value}`;
     const ws = new WebSocket(`${base}/dicta/v1/listen${query}`);
 
     assert.equal(await closeCode(ws), 4001);
-    assert.match(warned.mock.calls[0].arguments[0], new RegExp(`^\\[[0-9a-f-]+\\] token rejected: ${reason}$`));
+    assert.match(
+      warned.mock.calls[0].arguments[0],
+      new RegExp(`^\\[[0-9a-f-]+\\] token rejected: ${reason}$`),
+    );
   });
 }
 
-test('logs connected with the sub of the token', async (t) => {
+test("logs connected with the sub of the token", async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);
-  const logged = t.mock.method(console, 'log', () => {});
+  const logged = t.mock.method(console, "log", () => {});
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign({ sub: 'user-1' })}`);
+  const ws = new WebSocket(
+    `${base}/dicta/v1/listen?token=${await sign({ sub: "user-1" })}`,
+  );
   const { sessionId } = JSON.parse((await nextMessage(ws)).data);
 
-  assert.equal(logged.mock.calls[0].arguments[0], `[${sessionId}] connected sub=user-1`);
+  assert.equal(
+    logged.mock.calls[0].arguments[0],
+    `[${sessionId}] connected sub=user-1`,
+  );
 });
 
-test('logs connected without sub when the token has none', async (t) => {
+test("logs connected without sub when the token has none", async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);
-  const logged = t.mock.method(console, 'log', () => {});
+  const logged = t.mock.method(console, "log", () => {});
 
   const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
   const { sessionId } = JSON.parse((await nextMessage(ws)).data);
@@ -114,14 +135,16 @@ test('logs connected without sub when the token has none', async (t) => {
   assert.equal(logged.mock.calls[0].arguments[0], `[${sessionId}] connected`);
 });
 
-test('sends ready without a token when unauthenticated is allowed', async (t) => {
-  const { base, shutdown } = await start({ auth: { allowUnauthenticated: true } });
+test("sends ready without a token when unauthenticated is allowed", async (t) => {
+  const { base, shutdown } = await start({
+    auth: { allowUnauthenticated: true },
+  });
   t.after(shutdown);
 
   const ws = new WebSocket(`${base}/dicta/v1/listen`);
   const message = JSON.parse((await nextMessage(ws)).data);
 
-  assert.equal(message.type, 'ready');
+  assert.equal(message.type, "ready");
 });
 
 // A provider that records what it receives and lets the test decide when the
@@ -144,14 +167,17 @@ function fakeProvider() {
     openStream,
   };
 
-  async function openStream({ onTranscript, onError }: StreamEvents): Promise<ProviderStream> {
+  async function openStream({
+    onTranscript,
+    onError,
+  }: StreamEvents): Promise<ProviderStream> {
     fake.report = onTranscript;
     fake.fail = onError;
     await opened;
     return {
       sendAudio: (chunk) => {
         if (fake.sendAudioThrows) {
-          throw new Error('send failed with secret details');
+          throw new Error("send failed with secret details");
         }
         fake.chunks.push(chunk);
       },
@@ -172,9 +198,12 @@ function untilClose(ws: WebSocket): Promise<{ messages: any[]; code: number }> {
   });
 }
 
-const PROVIDER_ERROR = { type: 'error', message: 'speech-to-text provider failed' };
+const PROVIDER_ERROR = {
+  type: "error",
+  message: "speech-to-text provider failed",
+};
 
-test('sends error and closes with 1011 when the provider cannot open', async (t) => {
+test("sends error and closes with 1011 when the provider cannot open", async (t) => {
   const fake = fakeProvider();
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
@@ -182,12 +211,12 @@ test('sends error and closes with 1011 when the provider cannot open', async (t)
   const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
   const result = untilClose(ws);
   await new Promise((resolve) => setTimeout(resolve, 50));
-  fake.failOpen(new Error('open failed with secret details'));
+  fake.failOpen(new Error("open failed with secret details"));
 
   assert.deepEqual(await result, { messages: [PROVIDER_ERROR], code: 1011 });
 });
 
-test('sends error and closes with 1011 when an open stream fails', async (t) => {
+test("sends error and closes with 1011 when an open stream fails", async (t) => {
   const fake = fakeProvider();
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
@@ -197,31 +226,34 @@ test('sends error and closes with 1011 when an open stream fails', async (t) => 
   fake.open();
   await ready;
   const result = untilClose(ws);
-  fake.fail(new Error('stream failed with secret details'));
+  fake.fail(new Error("stream failed with secret details"));
 
   assert.deepEqual(await result, { messages: [PROVIDER_ERROR], code: 1011 });
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(fake.closed, true);
 });
 
-test('prefixes connection logs with the session id from ready', async (t) => {
+test("prefixes connection logs with the session id from ready", async (t) => {
   const fake = fakeProvider();
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
-  const logged = t.mock.method(console, 'error', () => {});
+  const logged = t.mock.method(console, "error", () => {});
 
   const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
   const ready = nextMessage(ws);
   fake.open();
   const { sessionId } = JSON.parse((await ready).data);
   const result = untilClose(ws);
-  fake.fail(new Error('stream failed'));
+  fake.fail(new Error("stream failed"));
   await result;
 
-  assert.equal(logged.mock.calls[0].arguments[0], `[${sessionId}] provider error: stream failed`);
+  assert.equal(
+    logged.mock.calls[0].arguments[0],
+    `[${sessionId}] provider error: stream failed`,
+  );
 });
 
-test('sends error and closes with 1011 when sending audio throws', async (t) => {
+test("sends error and closes with 1011 when sending audio throws", async (t) => {
   const fake = fakeProvider();
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
@@ -237,7 +269,7 @@ test('sends error and closes with 1011 when sending audio throws', async (t) => 
   assert.deepEqual(await result, { messages: [PROVIDER_ERROR], code: 1011 });
 });
 
-test('a failing connection does not affect another one', async (t) => {
+test("a failing connection does not affect another one", async (t) => {
   const failing = fakeProvider();
   const healthy = fakeProvider();
   const fakes = [failing, healthy];
@@ -252,17 +284,17 @@ test('a failing connection does not affect another one', async (t) => {
   const second = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
   const secondReady = nextMessage(second);
   await new Promise((resolve) => setTimeout(resolve, 50));
-  failing.failOpen(new Error('open failed'));
+  failing.failOpen(new Error("open failed"));
   healthy.open();
 
   assert.equal((await firstResult).code, 1011);
   await secondReady;
   const transcript = nextMessage(second);
-  healthy.report({ text: 'still here', final: false });
-  assert.equal(JSON.parse((await transcript).data).text, 'still here');
+  healthy.report({ text: "still here", final: false });
+  assert.equal(JSON.parse((await transcript).data).text, "still here");
 });
 
-test('sends ready only after the provider stream is open', async (t) => {
+test("sends ready only after the provider stream is open", async (t) => {
   const fake = fakeProvider();
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
@@ -277,7 +309,7 @@ test('sends ready only after the provider stream is open', async (t) => {
   await nextMessage(ws);
 });
 
-test('forwards audio to the provider and transcripts to the client', async (t) => {
+test("forwards audio to the provider and transcripts to the client", async (t) => {
   const fake = fakeProvider();
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
@@ -290,17 +322,17 @@ test('forwards audio to the provider and transcripts to the client', async (t) =
   ws.send(new Uint8Array([1, 2, 3]));
   const transcript = nextMessage(ws);
   await new Promise((resolve) => setTimeout(resolve, 50));
-  fake.report({ text: 'hello', final: true });
+  fake.report({ text: "hello", final: true });
 
-  assert.deepEqual([...Buffer.concat(fake.chunks)], [1, 2, 3]);
+  assert.deepEqual(Buffer.concat(fake.chunks), Buffer.from([1, 2, 3]));
   assert.deepEqual(JSON.parse((await transcript).data), {
-    type: 'transcript',
-    text: 'hello',
+    type: "transcript",
+    text: "hello",
     final: true,
   });
 });
 
-test('closes the provider stream when the connection closes', async (t) => {
+test("closes the provider stream when the connection closes", async (t) => {
   const fake = fakeProvider();
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
@@ -316,7 +348,7 @@ test('closes the provider stream when the connection closes', async (t) => {
   assert.equal(fake.closed, true);
 });
 
-test('accepts a 64 KiB frame', async (t) => {
+test("accepts a 64 KiB frame", async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);
 
@@ -332,7 +364,7 @@ test('accepts a 64 KiB frame', async (t) => {
   assert.equal(closed, false);
 });
 
-test('closes with 1009 when a frame is larger than 64 KiB', async (t) => {
+test("closes with 1009 when a frame is larger than 64 KiB", async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);
 
@@ -346,18 +378,18 @@ test('closes with 1009 when a frame is larger than 64 KiB', async (t) => {
   assert.equal((await closed).code, 1009);
 });
 
-test('rejects other paths', async (t) => {
+test("rejects other paths", async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);
 
   const ws = new WebSocket(`${base}/other`);
   await new Promise<void>((resolve, reject) => {
     ws.onerror = () => resolve();
-    ws.onopen = () => reject(new Error('connection was accepted'));
+    ws.onopen = () => reject(new Error("connection was accepted"));
   });
 });
 
-test('shutdown closes open connections with 1001', async () => {
+test("shutdown closes open connections with 1001", async () => {
   const { base, shutdown } = await start();
 
   const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
@@ -370,13 +402,13 @@ test('shutdown closes open connections with 1001', async () => {
   assert.equal((await closed).code, 1001);
 });
 
-test('shutdown stops accepting connections', async () => {
+test("shutdown stops accepting connections", async () => {
   const { base, shutdown } = await start();
   await shutdown();
 
   const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
   await new Promise<void>((resolve, reject) => {
     ws.onerror = () => resolve();
-    ws.onopen = () => reject(new Error('connection was accepted'));
+    ws.onopen = () => reject(new Error("connection was accepted"));
   });
 });

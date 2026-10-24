@@ -21,8 +21,11 @@ Node.js (current LTS) and TypeScript (strict).
 
 Run them after every change.
 
-- Type check: `npm run check`
+- Format and type check: `npm run check`
+- Lint: `npm run lint`
 - Tests: `npm run test`
+
+`npm run format` fixes formatting.
 
 ## Commits
 

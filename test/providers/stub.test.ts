@@ -1,10 +1,10 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import type { Transcript } from '../../src/providers/provider.ts';
-import { openStubStream } from '../../src/providers/stub.ts';
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { Transcript } from "../../src/providers/provider.ts";
+import { openStubStream } from "../../src/providers/stub.ts";
 
-test('reports the total bytes as interims, then a final after 1 second', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+test("reports the total bytes as interims, then a final after 1 second", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const transcripts: Transcript[] = [];
   const stream = await openStubStream({
     onTranscript: (transcript) => transcripts.push(transcript),
@@ -15,16 +15,16 @@ test('reports the total bytes as interims, then a final after 1 second', async (
   stream.sendAudio(Buffer.alloc(50));
   t.mock.timers.tick(999);
   assert.deepEqual(transcripts, [
-    { text: '100 bytes', final: false },
-    { text: '150 bytes', final: false },
+    { text: "100 bytes", final: false },
+    { text: "150 bytes", final: false },
   ]);
 
   t.mock.timers.tick(1);
-  assert.deepEqual(transcripts.at(-1), { text: '150 bytes', final: true });
+  assert.deepEqual(transcripts.at(-1), { text: "150 bytes", final: true });
 });
 
-test('sends no final after close', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+test("sends no final after close", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const transcripts: Transcript[] = [];
   const stream = await openStubStream({
     onTranscript: (transcript) => transcripts.push(transcript),
@@ -35,5 +35,5 @@ test('sends no final after close', async (t) => {
   stream.close();
   t.mock.timers.tick(1000);
 
-  assert.deepEqual(transcripts, [{ text: '10 bytes', final: false }]);
+  assert.deepEqual(transcripts, [{ text: "10 bytes", final: false }]);
 });

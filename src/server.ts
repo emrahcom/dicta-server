@@ -1,30 +1,41 @@
-import { randomUUID } from 'node:crypto';
-import { once } from 'node:events';
-import { createServer as createHttpServer, type Server } from 'node:http';
-import { errors, jwtVerify } from 'jose';
-import { WebSocketServer } from 'ws';
-import type { OpenStream, ProviderStream } from './providers/provider.ts';
+import { randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { createServer as createHttpServer, type Server } from "node:http";
+import { errors, jwtVerify } from "jose";
+import { WebSocketServer } from "ws";
+import type { OpenStream, ProviderStream } from "./providers/provider.ts";
 
-const LISTEN_PATH = '/dicta/v1/listen';
+const LISTEN_PATH = "/dicta/v1/listen";
 const MAX_FRAME_BYTES = 64 * 1024;
-const PROVIDER_ERROR_MESSAGE = 'speech-to-text provider failed';
+const PROVIDER_ERROR_MESSAGE = "speech-to-text provider failed";
 
-export type AuthOptions = { jwtSecret: string } | { allowUnauthenticated: true };
+export type AuthOptions =
+  { jwtSecret: string } | { allowUnauthenticated: true };
 
-export function createServer({ auth, openStream }: { auth: AuthOptions; openStream: OpenStream }): {
+export function createServer({
+  auth,
+  openStream,
+}: {
+  auth: AuthOptions;
+  openStream: OpenStream;
+}): {
   server: Server;
   shutdown: () => Promise<void>;
 } {
-  const secret = 'jwtSecret' in auth ? new TextEncoder().encode(auth.jwtSecret) : null;
+  const secret =
+    "jwtSecret" in auth ? new TextEncoder().encode(auth.jwtSecret) : null;
   const server = createHttpServer((_req, res) => {
     res.writeHead(404).end();
   });
-  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
+  const wss = new WebSocketServer({
+    noServer: true,
+    maxPayload: MAX_FRAME_BYTES,
+  });
 
-  server.on('upgrade', (req, socket, head) => {
-    const url = new URL(req.url ?? '', 'http://localhost');
+  server.on("upgrade", (req, socket, head) => {
+    const url = new URL(req.url ?? "", "http://localhost");
     if (url.pathname !== LISTEN_PATH) {
-      socket.end('HTTP/1.1 404 Not Found\r\n\r\n');
+      socket.end("HTTP/1.1 404 Not Found\r\n\r\n");
       return;
     }
     // The upgrade is accepted before the token check, so the client can read
@@ -34,10 +45,12 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
       const tag = `[${sessionId}]`;
       // Without a listener, a protocol error (for example a too large frame)
       // would crash the process. ws closes the connection itself.
-      ws.on('error', (err) => console.warn(`${tag} connection error: ${err.message}`));
+      ws.on("error", (err) =>
+        console.warn(`${tag} connection error: ${err.message}`),
+      );
       let sub: string | undefined;
       if (secret) {
-        const check = await checkToken(url.searchParams.get('token'), secret);
+        const check = await checkToken(url.searchParams.get("token"), secret);
         if (!check.ok) {
           console.warn(`${tag} token rejected: ${check.reason}`);
           ws.close(4001);
@@ -48,13 +61,17 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
       if (ws.readyState !== ws.OPEN) {
         return;
       }
-      console.log(`${tag} connected${sub === undefined ? '' : ` sub=${sub}`}`);
+      console.log(`${tag} connected${sub === undefined ? "" : ` sub=${sub}`}`);
 
       // Details stay in the log; the client gets a generic message.
       const fail = (err: unknown) => {
-        console.error(`${tag} provider error: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(
+          `${tag} provider error: ${err instanceof Error ? err.message : String(err)}`,
+        );
         if (ws.readyState === ws.OPEN) {
-          ws.send(JSON.stringify({ type: 'error', message: PROVIDER_ERROR_MESSAGE }));
+          ws.send(
+            JSON.stringify({ type: "error", message: PROVIDER_ERROR_MESSAGE }),
+          );
           ws.close(1011);
         }
       };
@@ -64,7 +81,7 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
         stream = await openStream({
           onTranscript: (transcript) => {
             if (ws.readyState === ws.OPEN) {
-              ws.send(JSON.stringify({ type: 'transcript', ...transcript }));
+              ws.send(JSON.stringify({ type: "transcript", ...transcript }));
             }
           },
           onError: fail,
@@ -77,8 +94,8 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
         stream.close();
         return;
       }
-      ws.on('close', () => stream.close());
-      ws.on('message', (data, isBinary) => {
+      ws.on("close", () => stream.close());
+      ws.on("message", (data, isBinary) => {
         if (!isBinary) {
           return;
         }
@@ -88,7 +105,7 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
           fail(err);
         }
       });
-      ws.send(JSON.stringify({ type: 'ready', sessionId }));
+      ws.send(JSON.stringify({ type: "ready", sessionId }));
     });
   });
 
@@ -96,7 +113,7 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
   // when all of them are closed.
   async function shutdown(): Promise<void> {
     server.close();
-    const closed = [...wss.clients].map((ws) => once(ws, 'close'));
+    const closed = [...wss.clients].map((ws) => once(ws, "close"));
     for (const ws of wss.clients) {
       ws.close(1001);
     }
@@ -108,14 +125,17 @@ export function createServer({ auth, openStream }: { auth: AuthOptions; openStre
 
 type TokenCheck = { ok: true; sub?: string } | { ok: false; reason: string };
 
-async function checkToken(token: string | null, secret: Uint8Array): Promise<TokenCheck> {
+async function checkToken(
+  token: string | null,
+  secret: Uint8Array,
+): Promise<TokenCheck> {
   if (!token) {
-    return { ok: false, reason: 'missing' };
+    return { ok: false, reason: "missing" };
   }
   try {
     const { payload } = await jwtVerify(token, secret, {
-      algorithms: ['HS256'],
-      requiredClaims: ['exp'],
+      algorithms: ["HS256"],
+      requiredClaims: ["exp"],
     });
     return { ok: true, sub: payload.sub };
   } catch (err) {
@@ -126,17 +146,17 @@ async function checkToken(token: string | null, secret: Uint8Array): Promise<Tok
 // Only fixed strings: nothing from an unverified token reaches the log.
 function rejectionReason(err: unknown): string {
   if (err instanceof errors.JWTExpired) {
-    return 'expired';
+    return "expired";
   }
   if (err instanceof errors.JWSSignatureVerificationFailed) {
-    return 'invalid signature';
+    return "invalid signature";
   }
   if (
     err instanceof errors.JWTClaimValidationFailed &&
-    err.claim === 'exp' &&
-    err.reason === 'missing'
+    err.claim === "exp" &&
+    err.reason === "missing"
   ) {
-    return 'missing exp';
+    return "missing exp";
   }
-  return 'invalid';
+  return "invalid";
 }

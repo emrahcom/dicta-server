@@ -32,6 +32,9 @@ export async function transcribeFixture(
   );
   const pcm = wav.subarray(wav.indexOf("data") + 8);
   const finals: string[] = [];
+  // An error or a close the client did not start, also after ready.
+  const problems: string[] = [];
+  let closing = false;
 
   const query = lang === undefined ? "" : `?lang=${encodeURIComponent(lang)}`;
   const ws = new WebSocket(`ws://localhost:${port}/dicta/v1/listen${query}`);
@@ -45,12 +48,18 @@ export async function transcribeFixture(
       if (message.type === "ready") {
         resolve();
       } else if (message.type === "error") {
+        problems.push("server sent an error");
         reject(new Error("server sent an error"));
       } else if (message.type === "transcript" && message.final) {
         finals.push(message.text ?? "");
       }
     };
-    ws.onclose = (event) => reject(new Error(`closed: ${event.code}`));
+    ws.onclose = (event) => {
+      if (!closing) {
+        problems.push(`closed: ${event.code}`);
+      }
+      reject(new Error(`closed: ${event.code}`));
+    };
   });
 
   // At real-time pace, then stop, as push-to-talk does.
@@ -59,7 +68,11 @@ export async function transcribeFixture(
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   await new Promise((resolve) => setTimeout(resolve, WAIT_AFTER_AUDIO_MS));
+  closing = true;
   ws.close();
 
+  if (problems.length > 0) {
+    throw new Error(problems.join(", "));
+  }
   return finals.join(" ").toLowerCase();
 }

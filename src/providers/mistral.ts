@@ -21,10 +21,6 @@ const MISTRAL_URL = "wss://api.mistral.ai/v1/audio/transcriptions/realtime";
 const OPEN_TIMEOUT_MS = 10_000;
 const FLUSH_AFTER_MS = 1000;
 
-// A Unicode sentence terminator, optionally followed by closing brackets or
-// quotes.
-const SENTENCE_END = /\p{Sentence_Terminal}[\p{Pe}\p{Pf}"']*$/u;
-
 export function createMistral({
   apiKey,
   model,
@@ -132,10 +128,10 @@ export function createMistral({
             if (state !== "open") {
               break;
             }
+            // A final comes only from the flush. A sentence end is no sign of
+            // one, since a period arrives as its own delta ("Dr. Smith").
             pending += message.text ?? "";
-            if (SENTENCE_END.test(pending.trim())) {
-              sendFinal();
-            } else if (pending.trim()) {
+            if (pending.trim()) {
               onTranscript({ text: pending.trim(), final: false });
             }
             break;

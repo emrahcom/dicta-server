@@ -163,20 +163,19 @@ test("sends audio as base64", async (t) => {
   });
 });
 
-test("reports deltas as interims and a sentence end as a final", async (t) => {
+test("reports deltas as interims, also across a period", async (t) => {
   const { mistral, recorded } = await open(t);
 
-  for (const text of ["The", " Bir", "ch", ".", " Glue"]) {
+  for (const text of ["call", " Dr", ".", " Smith"]) {
     await mistral.send({ type: "transcription.text.delta", text });
   }
   await settle();
 
   assert.deepEqual(recorded.transcripts, [
-    { text: "The", final: false },
-    { text: "The Bir", final: false },
-    { text: "The Birch", final: false },
-    { text: "The Birch.", final: true },
-    { text: "Glue", final: false },
+    { text: "call", final: false },
+    { text: "call Dr", final: false },
+    { text: "call Dr.", final: false },
+    { text: "call Dr. Smith", final: false },
   ]);
 });
 

@@ -167,28 +167,31 @@ export function createServer({
       }
     };
 
-    // The current utterance (architecture.md, Providers): whether audio came
-    // since the last final, whether a finish waits for its answer, and whether
-    // an `end` came while it waited.
-    let audioSinceFinal = false;
-    let finishing = false;
-    let endKept = false;
+    // Utterances (architecture.md, Providers): whether audio came since the
+    // last finish, and the finals still expected, in order: a provider answer
+    // to wait for, or an empty final for a finish without audio.
+    let audioSinceFinish = false;
+    const expected: ("provider" | "empty")[] = [];
     let finishTimer: NodeJS.Timeout | undefined;
+
+    const sendWaitingEmptyFinals = () => {
+      while (expected[0] === "empty") {
+        expected.shift();
+        sendTranscript({ text: "", final: true });
+      }
+    };
 
     let stream: ProviderStream;
     try {
       stream = await openStream(
         {
           onTranscript: guard((transcript) => {
-            sendTranscript(transcript);
-            if (transcript.final) {
-              finishing = false;
-              // The next utterance ended while this final was pending.
-              if (endKept) {
-                endKept = false;
-                finishUtterance();
-              }
+            // A provider's final answers the oldest finish it was asked for.
+            if (transcript.final && expected[0] === "provider") {
+              expected.shift();
             }
+            sendTranscript(transcript);
+            sendWaitingEmptyFinals();
           }),
           onError: guard(fail),
           onWarning: guard((warning) =>
@@ -205,22 +208,22 @@ export function createServer({
       stream.close();
       return;
     }
-    // Finishes the utterance on `end` or after FINISH_AFTER_MS without audio.
-    // Without audio since the last final, the provider is not asked: the final
-    // is empty (Mistral even fails a flush without audio).
+
+    // Finishes the utterance on `end` or FINISH_AFTER_MS after the last audio
+    // frame. With audio, the provider is asked at once, so it cuts at this
+    // point in the audio. Without audio, it is not asked (Mistral even fails a
+    // flush without audio) and the final is empty, after the finals still
+    // waiting.
     function finishUtterance() {
       clearTimeout(finishTimer);
-      if (finishing) {
-        endKept = true;
-        return;
+      if (audioSinceFinish) {
+        audioSinceFinish = false;
+        expected.push("provider");
+        stream.finish();
+      } else {
+        expected.push("empty");
+        sendWaitingEmptyFinals();
       }
-      if (!audioSinceFinal) {
-        sendTranscript({ text: "", final: true });
-        return;
-      }
-      audioSinceFinal = false;
-      finishing = true;
-      stream.finish();
     }
 
     ws.on(
@@ -235,7 +238,7 @@ export function createServer({
       guard((data, isBinary) => {
         try {
           if (isBinary) {
-            audioSinceFinal = true;
+            audioSinceFinish = true;
             stream.sendAudio(data as Buffer);
             clearTimeout(finishTimer);
             finishTimer = setTimeout(guard(finishUtterance), FINISH_AFTER_MS);

@@ -17,7 +17,7 @@ In a browser: `new WebSocket(url, ["dicta", jwt])`.
   `Sec-WebSocket-Protocol` header, after the protocol name `dicta`. It is the
   only header a browser can set on a WebSocket, and unlike the URL it is not in
   the default access logs of reverse proxies. The server answers with
-  `Sec-WebSocket-Protocol: dicta`. The server must not log the token.
+  `Sec-WebSocket-Protocol: dicta`.
 - The token is checked only when the connection opens. An open connection stays
   open after the token expires; a new token is needed only for a new connection.
 - A missing, invalid or expired token: the server closes the socket with code
@@ -32,8 +32,7 @@ Binary frames carry the audio: raw PCM signed 16-bit little-endian, 16 kHz,
 mono. The client streams audio in small frames while the user speaks, typically
 every 20 to 100 ms. It sends audio only while it captures speech, for example
 while push-to-talk is held. A single frame is at most 64 KiB; a larger one
-closes the connection with code `1009`. Audio buffered before `ready` is sent in
-the same small frames, never merged into one.
+closes the connection with code `1009`.
 
 When the user stops speaking, the client sends one text frame:
 
@@ -41,12 +40,8 @@ When the user stops speaking, the client sends one text frame:
 { "type": "end" }
 ```
 
-The server then sends the final transcript as soon as the provider has it.
-Without `end`, it finishes the utterance about 5 seconds after the audio stops.
 The connection stays open, and the client sends audio again for the next
-utterance. The client may send the next utterance's audio and `end` before the
-previous final arrives. Finals arrive in order, one for each finished utterance.
-A client that wants the last final waits for it before closing.
+utterance, also before the previous final arrives.
 
 The server ignores other text frames, and audio or `end` that arrives before
 `ready`.
@@ -57,7 +52,8 @@ Text frames, one JSON object each, always with a `type` field. Clients ignore
 types they do not know.
 
 `ready`, sent once after the token is accepted and the speech-to-text provider
-is connected. The client starts sending audio after it.
+is connected. The client starts sending audio after it. A client that buffers
+audio until then sends it in the same small frames, never merged into one.
 
 ```json
 { "type": "ready", "sessionId": "..." }
@@ -68,9 +64,13 @@ it replaces the previous interim and may still change. `final: true` is final:
 it never changes, and the next transcript starts new text. Interims can also
 arrive after `end`, until the final.
 
-Each finished utterance gets exactly one final: after the client's `end`, or
-about 5 seconds after the audio stops. Its text is empty when no speech was
-recognized, so the client always knows when an utterance is over.
+Each `end` finishes an utterance. Without `end`, an utterance is finished 5
+seconds after its last audio frame, for clients that cannot send `end`. Each
+finished utterance gets exactly one final, and finals arrive in the order the
+utterances were finished. A final's text is empty when no audio came since the
+previous finish or no speech was recognized, so the client always knows when an
+utterance is over. A client that wants the last final waits for it before
+closing.
 
 ```json
 { "type": "transcript", "text": "add a note", "final": false }

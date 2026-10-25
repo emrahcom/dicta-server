@@ -22,9 +22,8 @@ Message formats are in `contract-protocol.md`.
   behind it.
 - The server creates the session id. It never takes one from the client.
 - No session resume. After a disconnect the client opens a new connection.
-- The server pings every connection every 30 seconds. A connection that has not
-  answered the previous ping is closed, so a client that vanished without
-  closing does not keep a provider stream open.
+- The ping in `contract-protocol.md` (Closing) finds a client that vanished
+  without closing, so it does not keep a provider stream open.
 
 ## Authentication
 
@@ -33,9 +32,8 @@ Message formats are in `contract-protocol.md`.
 - The application's backend holds the signing key and issues the tokens. The key
   never reaches the browser.
 - HS256 with a shared secret (`JWT_SECRET`). The `jose` package verifies it.
-- `exp` is required and is checked when the connection opens. An open connection
-  is not closed when its token expires. `sub` is optional and identifies the
-  user.
+- `exp` is required and is checked when the connection opens, as the contract
+  describes. `sub` is optional and identifies the user.
 - The upgrade is accepted before the token is checked, so the client can read
   the `4001` close code.
 
@@ -43,17 +41,16 @@ Message formats are in `contract-protocol.md`.
 
 - Each provider is an adapter behind one interface: open a stream, send audio,
   finish an utterance, receive interim and final transcripts, close.
-- The server finishes an utterance when the client sends `end`, or after 5
-  seconds without audio frames, as a safety net for clients that cannot send
-  `end`. The server handles `end` and this timer, not the providers.
-- When audio came since the last final, the server asks the provider to finish,
-  and the provider's answer becomes the final, with empty text when nothing was
-  recognized. When no audio came, the server sends an empty final itself and
-  does not ask the provider. While a finish waits for its answer, an `end` is
-  kept and handled right after that answer, so the next utterance is finished
-  too.
-- So each finished utterance gets exactly one final, and never before it is
-  finished, so a pause inside a command does not split it.
+- The server finishes an utterance on `end`, or 5 seconds after the last audio
+  frame. The server handles `end` and this timer, not the providers.
+- When audio came since the last finish, the server asks the provider to finish
+  at once, so the provider cuts at that point in the audio. The provider's
+  answer becomes the final, with empty text when nothing was recognized.
+  Providers answer finishes in the order they were asked.
+- When no audio came since the last finish, the server does not ask the provider
+  and sends an empty final itself, after the finals still waiting for answers.
+- A provider's own end-of-speech detection never makes a final, so a pause
+  shorter than 5 seconds does not split a command.
 - The provider and its API key come from the server configuration.
 - The provider stream is opened after the token is accepted and closed with the
   connection. `ready` is sent only after it is open, so the server never buffers
@@ -61,9 +58,10 @@ Message formats are in `contract-protocol.md`.
 - The server passes the client's `lang` to the provider. A well-formed tag is a
   language code of 2 or 3 letters, optionally followed by subtags of 1 to 8
   letters or digits, each after a `-`. A malformed value is logged as a warning,
-  quoted like `sub`, and not passed on.
-- A provider stream can fail while opening or later. Either way the server logs
-  the details, sends a generic `error` to the client and closes with `1011`.
+  quoted as in Logging, and not passed on.
+- A provider stream can fail while opening, including when the provider does not
+  confirm it within 10 seconds, or later. Either way the server logs the
+  details, sends a generic `error` to the client and closes with `1011`.
   Provider details never reach the client. Only that connection is affected. The
   text of an unfinished utterance is discarded and never becomes a final, so a
   cut-off command is not acted on.
@@ -108,9 +106,9 @@ Message formats are in `contract-protocol.md`.
 - The stream is open when the WebSocket opens.
 - Audio is forwarded as it is.
 - The language tag is sent as it is, and without one the language is English.
-  When Deepgram refuses a tag with a region or script (`de-BE`) with HTTP 400,
-  the server opens again with its language code (`de`). A language Deepgram does
-  not support at all fails the open.
+  When Deepgram refuses a tag that has subtags with HTTP 400, the server opens
+  again with its language code (`de` for `de-BE`). A language Deepgram does not
+  support at all fails the open.
 - Deepgram sends results per segment. Finished segments are collected, and each
   result is sent as an interim with the collected text and the current segment.
 - A final is sent only when Deepgram answers a `Finalize`, which the server
@@ -143,8 +141,8 @@ when it closes. Any instance can serve any user.
 ## Logging
 
 - Logs go to the console.
-- Audio and transcripts are never logged, and neither is the content of provider
-  messages, except a provider's own error description.
+- Tokens, audio and transcripts are never logged, and neither is the content of
+  provider messages, except a provider's own error description.
 - The session id is created when a connection starts. Every log line about a
   connection starts with it: `[<sessionId>] <message>`.
 - A rejected token is logged with the reason (missing, expired, invalid

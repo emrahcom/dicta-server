@@ -168,9 +168,11 @@ export function createServer({
     };
 
     // The current utterance (architecture.md, Providers): whether audio came
-    // since the last final, and whether a finish waits for its answer.
+    // since the last final, whether a finish waits for its answer, and whether
+    // an `end` came while it waited.
     let audioSinceFinal = false;
     let finishing = false;
+    let endKept = false;
     let finishTimer: NodeJS.Timeout | undefined;
 
     let stream: ProviderStream;
@@ -178,10 +180,15 @@ export function createServer({
       stream = await openStream(
         {
           onTranscript: guard((transcript) => {
+            sendTranscript(transcript);
             if (transcript.final) {
               finishing = false;
+              // The next utterance ended while this final was pending.
+              if (endKept) {
+                endKept = false;
+                finishUtterance();
+              }
             }
-            sendTranscript(transcript);
           }),
           onError: guard(fail),
           onWarning: guard((warning) =>
@@ -201,9 +208,10 @@ export function createServer({
     // Finishes the utterance on `end` or after FINISH_AFTER_MS without audio.
     // Without audio since the last final, the provider is not asked: the final
     // is empty (Mistral even fails a flush without audio).
-    const finishUtterance = () => {
+    function finishUtterance() {
       clearTimeout(finishTimer);
       if (finishing) {
+        endKept = true;
         return;
       }
       if (!audioSinceFinal) {
@@ -213,7 +221,7 @@ export function createServer({
       audioSinceFinal = false;
       finishing = true;
       stream.finish();
-    };
+    }
 
     ws.on(
       "close",

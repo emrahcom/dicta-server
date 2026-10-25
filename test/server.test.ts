@@ -556,7 +556,7 @@ test("sends an empty final on end without audio, without asking the provider", a
   assert.equal(fake.finished, 0);
 });
 
-test("ignores end while a finish waits, and finishes again after the final", async (t) => {
+test("keeps an end that comes while a finish waits", async (t) => {
   const { fake, ws } = await openWithFake(t);
   const finals: string[] = [];
   ws.onmessage = (event) => {
@@ -569,23 +569,27 @@ test("ignores end while a finish waits, and finishes again after the final", asy
     }
   };
 
+  // Utterance A, then B with its end, all before A's final.
   ws.send(new Uint8Array([1]));
   ws.send(JSON.stringify({ type: "end" }));
-  ws.send(JSON.stringify({ type: "end" }));
   ws.send(new Uint8Array([2]));
-  await untilChunks(fake, 2);
-  // The second end neither asked the provider nor sent an empty final.
-  assert.equal(fake.finished, 1);
-  assert.deepEqual(finals, []);
-
-  // The answer to the first finish; audio [2] came after it was asked.
-  fake.report({ text: "add a note", final: true });
+  ws.send(JSON.stringify({ type: "end" }));
   ws.send(JSON.stringify({ type: "end" }));
   ws.send(new Uint8Array([3]));
   await untilChunks(fake, 3);
+  // Only A was asked so far, and no empty final was sent for the extra end.
+  assert.equal(fake.finished, 1);
+  assert.deepEqual(finals, []);
 
-  assert.deepEqual(finals, ["add a note"]);
+  // A's final makes the kept end finish B, without new audio.
+  fake.report({ text: "add a note", final: true });
   assert.equal(fake.finished, 2);
+  fake.report({ text: "make it blue", final: true });
+  while (finals.length < 2) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  assert.deepEqual(finals, ["add a note", "make it blue"]);
 });
 
 test("finishes the utterance 5 seconds after the last audio", async (t) => {

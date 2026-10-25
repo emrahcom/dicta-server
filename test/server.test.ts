@@ -247,6 +247,18 @@ function fakeProvider() {
   return fake;
 }
 
+// Connects with a fake provider that is already open.
+async function openWithFake(t: TestContext, query = "") {
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+  const ws = listen(base, await sign(), query);
+  const ready = nextMessage(ws);
+  fake.open();
+  const { sessionId } = JSON.parse((await ready).data);
+  return { fake, ws, sessionId: sessionId as string };
+}
+
 // Collects every message until the socket closes, then resolves with them and
 // the close code.
 function untilClose(ws: WebSocket): Promise<{ messages: any[]; code: number }> {
@@ -276,14 +288,7 @@ test("sends error and closes with 1011 when the provider cannot open", async (t)
 });
 
 test("sends error and closes with 1011 when an open stream fails", async (t) => {
-  const fake = fakeProvider();
-  const { base, shutdown } = await start({ openStream: fake.openStream });
-  t.after(shutdown);
-
-  const ws = listen(base, await sign());
-  const ready = nextMessage(ws);
-  fake.open();
-  await ready;
+  const { fake, ws } = await openWithFake(t);
   const result = untilClose(ws);
   fake.fail(new Error("stream failed with secret details"));
 
@@ -300,30 +305,16 @@ const langCases: { name: string; query: string; lang: string | undefined }[] = [
 
 for (const { name, query, lang } of langCases) {
   test(`passes ${name} to the provider`, async (t) => {
-    const fake = fakeProvider();
-    const { base, shutdown } = await start({ openStream: fake.openStream });
-    t.after(shutdown);
-
-    const ws = listen(base, await sign(), query);
-    const ready = nextMessage(ws);
-    fake.open();
-    await ready;
+    const { fake } = await openWithFake(t, query);
 
     assert.deepEqual(fake.options, { lang });
   });
 }
 
 test("drops a malformed lang with a warning", async (t) => {
-  const fake = fakeProvider();
-  const { base, shutdown } = await start({ openStream: fake.openStream });
-  t.after(shutdown);
   const warned = t.mock.method(console, "warn", () => {});
-
   const lang = encodeURIComponent("de_DE\n");
-  const ws = listen(base, await sign(), `?lang=${lang}`);
-  const ready = nextMessage(ws);
-  fake.open();
-  const { sessionId } = JSON.parse((await ready).data);
+  const { fake, sessionId } = await openWithFake(t, `?lang=${lang}`);
 
   assert.deepEqual(fake.options, { lang: undefined });
   assert.equal(
@@ -333,15 +324,8 @@ test("drops a malformed lang with a warning", async (t) => {
 });
 
 test("logs provider warnings with the session id and keeps the connection", async (t) => {
-  const fake = fakeProvider();
-  const { base, shutdown } = await start({ openStream: fake.openStream });
-  t.after(shutdown);
   const warned = t.mock.method(console, "warn", () => {});
-
-  const ws = listen(base, await sign());
-  const ready = nextMessage(ws);
-  fake.open();
-  const { sessionId } = JSON.parse((await ready).data);
+  const { fake, ws, sessionId } = await openWithFake(t);
   fake.warn("something odd");
 
   assert.equal(
@@ -352,15 +336,8 @@ test("logs provider warnings with the session id and keeps the connection", asyn
 });
 
 test("prefixes connection logs with the session id from ready", async (t) => {
-  const fake = fakeProvider();
-  const { base, shutdown } = await start({ openStream: fake.openStream });
-  t.after(shutdown);
   const logged = t.mock.method(console, "error", () => {});
-
-  const ws = listen(base, await sign());
-  const ready = nextMessage(ws);
-  fake.open();
-  const { sessionId } = JSON.parse((await ready).data);
+  const { fake, ws, sessionId } = await openWithFake(t);
   const result = untilClose(ws);
   fake.fail(new Error("stream failed"));
   await result;
@@ -372,14 +349,7 @@ test("prefixes connection logs with the session id from ready", async (t) => {
 });
 
 test("sends error and closes with 1011 when sending audio throws", async (t) => {
-  const fake = fakeProvider();
-  const { base, shutdown } = await start({ openStream: fake.openStream });
-  t.after(shutdown);
-
-  const ws = listen(base, await sign());
-  const ready = nextMessage(ws);
-  fake.open();
-  await ready;
+  const { fake, ws } = await openWithFake(t);
   const result = untilClose(ws);
   fake.sendAudioThrows = true;
   ws.send(new Uint8Array(10));
@@ -413,15 +383,8 @@ test("closes with 1011 and keeps serving after an unexpected error", async (t) =
 });
 
 test("closes with 1011 when sending a transcript throws", async (t) => {
-  const fake = fakeProvider();
-  const { base, shutdown } = await start({ openStream: fake.openStream });
-  t.after(shutdown);
   const logged = t.mock.method(console, "error", () => {});
-
-  const ws = listen(base, await sign());
-  const ready = nextMessage(ws);
-  fake.open();
-  await ready;
+  const { fake, ws } = await openWithFake(t);
   const result = untilClose(ws);
   const stringify = JSON.stringify;
   const broken = t.mock.method(JSON, "stringify", (value: unknown) => {
@@ -507,18 +470,6 @@ test("sends ready only after the provider stream is open", async (t) => {
   fake.open();
   await nextMessage(ws);
 });
-
-// Connects with a fake provider that is already open.
-async function openWithFake(t: TestContext) {
-  const fake = fakeProvider();
-  const { base, shutdown } = await start({ openStream: fake.openStream });
-  t.after(shutdown);
-  const ws = listen(base, await sign());
-  const ready = nextMessage(ws);
-  fake.open();
-  await ready;
-  return { fake, ws };
-}
 
 // Waits until the provider received `count` audio frames, without a timer, so
 // it also works while timers are mocked.
@@ -613,14 +564,7 @@ test("finishes the utterance 5 seconds after the last audio", async (t) => {
 });
 
 test("does not forward text frames to the provider", async (t) => {
-  const fake = fakeProvider();
-  const { base, shutdown } = await start({ openStream: fake.openStream });
-  t.after(shutdown);
-
-  const ws = listen(base, await sign());
-  const ready = nextMessage(ws);
-  fake.open();
-  await ready;
+  const { fake, ws } = await openWithFake(t);
 
   ws.send("not audio");
   ws.send(new Uint8Array([7]));
@@ -633,14 +577,7 @@ test("does not forward text frames to the provider", async (t) => {
 });
 
 test("forwards audio to the provider and transcripts to the client", async (t) => {
-  const fake = fakeProvider();
-  const { base, shutdown } = await start({ openStream: fake.openStream });
-  t.after(shutdown);
-
-  const ws = listen(base, await sign());
-  const ready = nextMessage(ws);
-  fake.open();
-  await ready;
+  const { fake, ws } = await openWithFake(t);
 
   ws.send(new Uint8Array([1, 2, 3]));
   const transcript = nextMessage(ws);
@@ -656,14 +593,7 @@ test("forwards audio to the provider and transcripts to the client", async (t) =
 });
 
 test("closes the provider stream when the connection closes", async (t) => {
-  const fake = fakeProvider();
-  const { base, shutdown } = await start({ openStream: fake.openStream });
-  t.after(shutdown);
-
-  const ws = listen(base, await sign());
-  const ready = nextMessage(ws);
-  fake.open();
-  await ready;
+  const { fake, ws } = await openWithFake(t);
 
   ws.close();
   await new Promise((resolve) => setTimeout(resolve, 50));
@@ -799,14 +729,7 @@ test("rejects other paths", async (t) => {
 
 test("keeps a connection that answers pings", async (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
-  const fake = fakeProvider();
-  const { base, shutdown } = await start({ openStream: fake.openStream });
-  t.after(shutdown);
-
-  const ws = listen(base, await sign());
-  const ready = nextMessage(ws);
-  fake.open();
-  await ready;
+  const { fake, ws } = await openWithFake(t);
   for (let i = 0; i < 3; i++) {
     t.mock.timers.tick(30_000);
     // Real time for the pong to come back.

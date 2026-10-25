@@ -59,12 +59,12 @@ Message formats are in `contract-protocol.md`.
   language code of 2 or 3 letters, optionally followed by subtags of 1 to 8
   letters or digits, each after a `-`. A malformed value is logged as a warning,
   quoted as in Logging, and not passed on.
-- A provider stream can fail while opening, including when the provider does not
-  confirm it within 10 seconds, or later. Either way the server logs the
-  details, sends a generic `error` to the client and closes with `1011`.
-  Provider details never reach the client. Only that connection is affected. The
-  text of an unfinished utterance is discarded and never becomes a final, so a
-  cut-off command is not acted on.
+- A provider stream can fail while opening (also when the provider does not
+  confirm the open within 10 seconds) or after it is open. Either way the server
+  logs the details, sends a generic `error` to the client and closes with
+  `1011`. Provider details never reach the client. Only that connection is
+  affected. Text and finals not yet sent are discarded, so a cut-off command is
+  not acted on.
 - A provider catches errors in its own event handlers and timers and reports
   them through its error callback. It never lets them escape, because the server
   cannot catch them there.
@@ -90,9 +90,9 @@ Message formats are in `contract-protocol.md`.
   when it has two letters (`de` for `de-DE`), otherwise Mistral detects the
   language itself.
 - Each text delta is sent as an interim with the text since the last final. A
-  final is sent only when the server finishes an utterance, by asking Mistral to
-  flush. A sentence end does not make a final, because Mistral sends a period as
-  its own delta and "Dr. Smith" or "3.50" would be cut.
+  final is the answer to `input_audio.flush`. A sentence end does not make a
+  final, because Mistral sends a period as its own delta and "Dr. Smith" or
+  "3.50" would be cut.
 - Protocol references. The docs give the endpoint, audio format and events:
   https://docs.mistral.ai/studio/audio/speech_to_text/realtime_transcription.md
   The client messages (`session.update`, `input_audio.append`,
@@ -112,8 +112,7 @@ Message formats are in `contract-protocol.md`.
 - Deepgram sends results per segment. Finished segments are collected, and each
   result is sent as an interim with the collected text and the current segment.
 - A final is sent only when Deepgram answers a `Finalize`, which the server
-  sends when it finishes an utterance. Deepgram's own end of speech
-  (`speech_final`) does not end the utterance.
+  sends when it finishes an utterance.
 - A `KeepAlive` every 4 seconds keeps the stream open, since Deepgram closes it
   after 10 seconds without audio.
 - Deepgram's `Error` messages are not fatal and are logged as warnings; fatal

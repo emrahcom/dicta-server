@@ -59,18 +59,10 @@ audio until then sends it in the same small frames, never merged into one.
 { "type": "ready", "sessionId": "..." }
 ```
 
-`transcript`, sent while the user speaks. `final: false` is an interim result:
-it replaces the previous interim and may still change. `final: true` is final:
-it never changes, and the next transcript starts new text. Interims can also
-arrive after `end`, until the final.
-
-Each `end` finishes an utterance. Without `end`, an utterance is finished 5
-seconds after its last audio frame, for clients that cannot send `end`. Each
-finished utterance gets exactly one final, and finals arrive in the order the
-utterances were finished. A final's text is empty when no audio came since the
-previous finish or no speech was recognized, so the client always knows when an
-utterance is over. A client that wants the last final waits for it before
-closing.
+`transcript`, the text of the current utterance. `final: false` is an interim
+result: it replaces the previous interim and may still change. `final: true` is
+final: it never changes, and the next transcript starts new text. Interims can
+also arrive after `end`, until the final.
 
 ```json
 { "type": "transcript", "text": "add a note", "final": false }
@@ -78,16 +70,27 @@ closing.
 
 `error`, sent when the speech-to-text provider fails, before the server closes
 the socket with code `1011`. It can come before `ready` when the provider cannot
-be reached or refuses the session, for example for an unsupported language. An
-utterance cut off by the failure gets no final.
+be reached or refuses the session, for example for an unsupported language.
 
 ```json
 { "type": "error", "message": "..." }
 ```
 
+## Utterances
+
+Each `end` finishes an utterance. If no `end` comes within 5 seconds after the
+last audio frame, the server finishes the utterance itself; an `end` after that
+finishes an utterance without audio. While the connection is open, each finished
+utterance gets exactly one final, and finals arrive in the order the utterances
+were finished. A final's text is empty when no audio came since the previous
+finish or no speech was recognized, so the client always knows when an utterance
+is over. A client that wants the last final waits for it before closing.
+
 ## Closing
 
-Either side may close at any time. The client closes when it is done.
+Either side may close at any time. The client closes when it is done. After a
+close, no more transcripts arrive: an utterance whose final has not arrived gets
+none, also when the client already sent `end`.
 
 The server sends a WebSocket ping every 30 seconds. A client that does not
 answer with a pong before the next ping is disconnected. Browsers and common
@@ -101,8 +104,7 @@ Code `4001` means the token was missing, invalid or expired. The client gets a
 new token from the application's backend before it connects again.
 
 Code `1001` from the server means it is shutting down. The client may open a new
-connection, which reaches another instance. An utterance not yet final gets no
-final.
+connection.
 
 Any other close, such as `1006` after a network loss or a missed pong, is
 handled like `1011`.

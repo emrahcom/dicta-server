@@ -42,7 +42,9 @@ Message formats are in `contract-protocol.md`.
 ## Providers
 
 - Each provider is an adapter behind one interface: open a stream, send audio,
-  receive interim and final transcripts, close.
+  finish an utterance, receive interim and final transcripts, close.
+- The server finishes an utterance when the client sends `end`, or after 1
+  second without audio frames. The provider then sends what it has as a final.
 - The provider and its API key come from the server configuration.
 - The provider stream is opened after the token is accepted and closed with the
   connection. `ready` is sent only after it is open, so the server never buffers
@@ -67,7 +69,7 @@ Message formats are in `contract-protocol.md`.
 
 - For development and tests. It needs no API key and calls no service.
 - For each audio frame it sends an interim with the total bytes received so far,
-  and after 1 second without audio a final with the same text.
+  and when the server finishes an utterance a final with the same text.
 
 ### mistral
 
@@ -79,9 +81,9 @@ Message formats are in `contract-protocol.md`.
   when it has two letters (`de` for `de-DE`), otherwise Mistral detects the
   language itself.
 - Each text delta is sent as an interim with the text since the last final. A
-  final is sent only after 1 second without audio frames, when the server asks
-  Mistral to flush. A sentence end does not make a final, because Mistral sends
-  a period as its own delta and "Dr. Smith" or "3.50" would be cut.
+  final is sent only when the server finishes an utterance, by asking Mistral to
+  flush. A sentence end does not make a final, because Mistral sends a period as
+  its own delta and "Dr. Smith" or "3.50" would be cut.
 - When Mistral fails, text not yet sent as a final is sent as a final first.
 - Protocol references. The docs give the endpoint, audio format and events:
   https://docs.mistral.ai/studio/audio/speech_to_text/realtime_transcription.md
@@ -103,8 +105,7 @@ Message formats are in `contract-protocol.md`.
 - Deepgram sends results per segment. Finished segments are collected, and each
   result is sent as an interim with the collected text and the current segment.
 - A final is sent when Deepgram marks the end of speech (`speech_final`) or
-  answers a `Finalize`, which the server sends after 1 second without audio
-  frames.
+  answers a `Finalize`, which the server sends when it finishes an utterance.
 - A `KeepAlive` every 4 seconds keeps the stream open, since Deepgram closes it
   after 10 seconds without audio.
 - When Deepgram fails, collected text is sent as a final first.

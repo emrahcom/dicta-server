@@ -26,14 +26,25 @@ In a browser: `new WebSocket(url, ["dicta", jwt])`.
 
 ## Client to server
 
-Binary frames only: raw audio, PCM signed 16-bit little-endian, 16 kHz, mono.
-The client streams audio in small frames while the user speaks, typically every
-20 to 100 ms. It sends audio only while it captures speech, for example while
-push-to-talk is held, and stops when the user stops speaking. The server sends
-the final transcript about 1 second after the audio stops. A single frame is at
-most 64 KiB; a larger one closes the connection with code `1009`. Audio buffered
-before `ready` is sent in the same small frames, never merged into one. The
-server ignores text frames, and audio that arrives before `ready`.
+Binary frames carry the audio: raw PCM signed 16-bit little-endian, 16 kHz,
+mono. The client streams audio in small frames while the user speaks, typically
+every 20 to 100 ms. It sends audio only while it captures speech, for example
+while push-to-talk is held. A single frame is at most 64 KiB; a larger one
+closes the connection with code `1009`. Audio buffered before `ready` is sent in
+the same small frames, never merged into one.
+
+When the user stops speaking, the client sends one text frame:
+
+```json
+{ "type": "end" }
+```
+
+The server then sends the final transcript as soon as the provider has it.
+Without `end`, it sends the final about 1 second after the audio stops. The
+connection stays open, and the client sends audio again for the next utterance.
+
+The server ignores other text frames, and audio or `end` that arrives before
+`ready`.
 
 ## Server to client
 

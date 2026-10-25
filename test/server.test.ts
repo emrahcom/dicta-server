@@ -499,6 +499,25 @@ test("sends an empty final on end without audio, without asking the provider", a
   assert.equal(fake.finished, 0);
 });
 
+test("ignores an empty binary frame", async (t) => {
+  const { fake, ws } = await openWithFake(t);
+
+  const final = nextMessage(ws);
+  ws.send(new Uint8Array(0));
+  ws.send(JSON.stringify({ type: "end" }));
+  // The binary frame after them shows they were all handled.
+  ws.send(new Uint8Array([1]));
+  await untilChunks(fake, 1);
+
+  assert.deepEqual(JSON.parse((await final).data), {
+    type: "transcript",
+    text: "",
+    final: true,
+  });
+  assert.equal(fake.finished, 0);
+  assert.deepEqual(fake.chunks, [Buffer.from([1])]);
+});
+
 test("keeps finals in order when utterances end before earlier finals", async (t) => {
   const { fake, ws } = await openWithFake(t);
   const finals: string[] = [];

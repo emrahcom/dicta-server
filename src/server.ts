@@ -238,6 +238,10 @@ export function createServer({
       guard((data, isBinary) => {
         try {
           if (isBinary) {
+            // Not audio, and Deepgram would take an empty frame as a close.
+            if ((data as Buffer).length === 0) {
+              return;
+            }
             audioSinceFinish = true;
             stream.sendAudio(data as Buffer);
             clearTimeout(finishTimer);

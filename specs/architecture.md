@@ -43,10 +43,16 @@ Message formats are in `contract-protocol.md`.
 
 - Each provider is an adapter behind one interface: open a stream, send audio,
   finish an utterance, receive interim and final transcripts, close.
-- The server finishes an utterance when the client sends `end`, or after 1
-  second without audio frames. The provider then sends what it has as a final.
-  Each utterance gets at most one final, and never before it is finished, so a
-  pause inside a command does not split it.
+- The server finishes an utterance when the client sends `end`, or after 5
+  seconds without audio frames, as a safety net for clients that cannot send
+  `end`. The server handles `end` and this timer, not the providers.
+- When audio came since the last final, the server asks the provider to finish,
+  and the provider's answer becomes the final, with empty text when nothing was
+  recognized. When no audio came, the server sends an empty final itself and
+  does not ask the provider. While a finish waits for its answer, another `end`
+  does nothing.
+- So each finished utterance gets exactly one final, and never before it is
+  finished, so a pause inside a command does not split it.
 - The provider and its API key come from the server configuration.
 - The provider stream is opened after the token is accepted and closed with the
   connection. `ready` is sent only after it is open, so the server never buffers
@@ -57,7 +63,9 @@ Message formats are in `contract-protocol.md`.
   quoted like `sub`, and not passed on.
 - A provider stream can fail while opening or later. Either way the server logs
   the details, sends a generic `error` to the client and closes with `1011`.
-  Provider details never reach the client. Only that connection is affected.
+  Provider details never reach the client. Only that connection is affected. The
+  text of an unfinished utterance is discarded and never becomes a final, so a
+  cut-off command is not acted on.
 - A provider catches errors in its own event handlers and timers and reports
   them through its error callback. It never lets them escape, because the server
   cannot catch them there.
@@ -86,7 +94,6 @@ Message formats are in `contract-protocol.md`.
   final is sent only when the server finishes an utterance, by asking Mistral to
   flush. A sentence end does not make a final, because Mistral sends a period as
   its own delta and "Dr. Smith" or "3.50" would be cut.
-- When Mistral fails, text not yet sent as a final is sent as a final first.
 - Protocol references. The docs give the endpoint, audio format and events:
   https://docs.mistral.ai/studio/audio/speech_to_text/realtime_transcription.md
   The client messages (`session.update`, `input_audio.append`,
@@ -110,7 +117,6 @@ Message formats are in `contract-protocol.md`.
   (`speech_final`) does not end the utterance.
 - A `KeepAlive` every 4 seconds keeps the stream open, since Deepgram closes it
   after 10 seconds without audio.
-- When Deepgram fails, collected text is sent as a final first.
 - Deepgram's `Error` messages are not fatal and are logged as warnings; fatal
   problems close the socket and count as a failure.
 - Requests opt out of Deepgram's Model Improvement Program (`mip_opt_out`)

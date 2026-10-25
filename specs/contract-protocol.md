@@ -40,8 +40,9 @@ When the user stops speaking, the client sends one text frame:
 ```
 
 The server then sends the final transcript as soon as the provider has it.
-Without `end`, it sends the final about 1 second after the audio stops. The
-connection stays open, and the client sends audio again for the next utterance.
+Without `end`, it finishes the utterance about 5 seconds after the audio stops.
+The connection stays open, and the client sends audio again for the next
+utterance. A client that wants the last final waits for it before closing.
 
 The server ignores other text frames, and audio or `end` that arrives before
 `ready`.
@@ -62,10 +63,9 @@ is connected. The client starts sending audio after it.
 it replaces the previous interim and may still change. `final: true` is final:
 it never changes, and the next transcript starts new text.
 
-Each utterance with recognized speech gets exactly one final, when it is
-finished: after the client's `end`, or about 1 second after the audio stops. An
-utterance without recognized speech gets no final, so the client does not wait
-for one forever.
+Each finished utterance gets exactly one final: after the client's `end`, or
+about 5 seconds after the audio stops. Its text is empty when no speech was
+recognized, so the client always knows when an utterance is over.
 
 ```json
 { "type": "transcript", "text": "add a note", "final": false }
@@ -73,7 +73,8 @@ for one forever.
 
 `error`, sent when the speech-to-text provider fails, before the server closes
 the socket with code `1011`. It can come before `ready` when the provider cannot
-be reached or refuses the session, for example for an unsupported language.
+be reached or refuses the session, for example for an unsupported language. An
+utterance cut off by the failure gets no final.
 
 ```json
 { "type": "error", "message": "..." }
@@ -88,7 +89,11 @@ answer with a pong before the next ping is disconnected. Browsers and common
 WebSocket libraries answer pings automatically.
 
 Code `1011` from the server means a server-side failure. It may come without an
-`error` message.
+`error` message. The client may open a new connection, waiting longer after each
+failure in a row.
+
+Code `4001` means the token was missing, invalid or expired. The client gets a
+new token from the application's backend before it connects again.
 
 Code `1001` from the server means it is shutting down. The client may open a new
 connection, which reaches another instance.

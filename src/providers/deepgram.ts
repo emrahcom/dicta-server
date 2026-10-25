@@ -4,8 +4,7 @@
 // against the live API on 2026-10-24.
 //
 // Results come per segment: a segment grows in interim results and ends with
-// is_final. speech_final, or from_finalize after a Finalize, ends the
-// utterance.
+// is_final. The utterance ends with from_finalize, after a Finalize.
 // Deepgram closes a stream after 10 seconds without audio or KeepAlive.
 
 import WebSocket from "ws";
@@ -149,10 +148,9 @@ export function createDeepgram({
         if (message.is_final && transcript) {
           segments.push(transcript);
         }
-        if (
-          message.is_final &&
-          (message.speech_final || message.from_finalize)
-        ) {
+        // Only the answer to Finalize ends the utterance. speech_final does
+        // not, so a pause inside a command does not split it.
+        if (message.is_final && message.from_finalize) {
           sendFinal();
           return;
         }
@@ -262,7 +260,6 @@ class RefusedError extends Error {
 type DeepgramMessage = {
   type?: string;
   is_final?: boolean;
-  speech_final?: boolean;
   from_finalize?: boolean;
   channel?: { alternatives?: { transcript?: string }[] };
   description?: unknown;

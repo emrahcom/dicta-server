@@ -202,29 +202,27 @@ test("sends audio as binary frames", async (t) => {
   assert.deepEqual(await deepgram.next(), Buffer.from([1, 2, 3]));
 });
 
-test("collects segments into interims and sends a final at the end of speech", async (t) => {
+test("collects segments into interims and sends one final on Finalize", async (t) => {
   const { deepgram, recorded } = await open(t);
 
-  await deepgram.send(results("Composed upon", {}));
+  await deepgram.send(results("add a", {}));
+  await deepgram.send(results("add a note,", { is_final: true }));
+  // A pause inside the command: speech_final does not end the utterance.
   await deepgram.send(
-    results("Composed upon Westminster Bridge,", { is_final: true }),
+    results("saying", { is_final: true, speech_final: true }),
   );
-  await deepgram.send(results("by William", {}));
+  await deepgram.send(results("hello", {}));
   await deepgram.send(
-    results("by William Wordsworth.", { is_final: true, speech_final: true }),
+    results("hello", { is_final: true, from_finalize: true }),
   );
-  await deepgram.send(results("Read", {}));
   await settle();
 
   assert.deepEqual(recorded.transcripts, [
-    { text: "Composed upon", final: false },
-    { text: "Composed upon Westminster Bridge,", final: false },
-    { text: "Composed upon Westminster Bridge, by William", final: false },
-    {
-      text: "Composed upon Westminster Bridge, by William Wordsworth.",
-      final: true,
-    },
-    { text: "Read", final: false },
+    { text: "add a", final: false },
+    { text: "add a note,", final: false },
+    { text: "add a note, saying", final: false },
+    { text: "add a note, saying hello", final: false },
+    { text: "add a note, saying hello", final: true },
   ]);
 });
 
@@ -336,7 +334,7 @@ test("reports nothing after close", async (t) => {
   const { deepgram, recorded, stream } = await open(t);
 
   stream.close();
-  await deepgram.send(results("late", { is_final: true, speech_final: true }));
+  await deepgram.send(results("late", { is_final: true, from_finalize: true }));
   await settle();
 
   assert.deepEqual(recorded.transcripts, []);

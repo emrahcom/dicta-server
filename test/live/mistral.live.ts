@@ -1,21 +1,17 @@
 // Runs against the real Mistral API, to catch changes on Mistral's side. Not
 // part of `npm run test`; run it with `npm run test:live`.
 
-import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FIXTURE_WORDS, transcribeFixture } from "./transcribe.ts";
+import { checkFinals, transcribeUtterances } from "./transcribe.ts";
 
 test(
-  "transcribes speech with Mistral",
+  "gives one final per utterance with Mistral",
   {
     skip: process.env.MISTRAL_API_KEY ? false : "MISTRAL_API_KEY is not set",
-    timeout: 30_000,
+    timeout: 90_000,
   },
   async (t) => {
     // Mistral gets en for en-US.
-    const text = await transcribeFixture(t, "mistral", "en-US");
-    for (const word of FIXTURE_WORDS) {
-      assert.ok(text.includes(word), `"${word}" missing in: ${text}`);
-    }
+    checkFinals(await transcribeUtterances(t, "mistral", "en-US"));
   },
 );

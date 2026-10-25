@@ -22,6 +22,8 @@ In a browser: `new WebSocket(url, ["dicta", jwt])`.
   open after the token expires; a new token is needed only for a new connection.
 - A missing, invalid or expired token: the server closes the socket with code
   `4001`.
+- The WebSocket opens before the token is checked. Only `ready` means the
+  connection is accepted; a close such as `4001` can follow `open`.
 - `lang` is optional: the language the user speaks, as a BCP 47 tag such as
   `de`, `de-DE` or `en-US`. Without it, the server's provider uses its default.
   A value that is not a well-formed tag is ignored, and the connection goes on.
@@ -43,8 +45,8 @@ When the user stops speaking, the client sends one text frame:
 The connection stays open, and the client sends audio again for the next
 utterance, also before the previous final arrives.
 
-The server ignores other text frames, and audio or `end` that arrives before
-`ready`.
+The server ignores empty binary frames and other text frames. It also ignores
+audio or `end` that arrives before `ready`.
 
 ## Server to client
 

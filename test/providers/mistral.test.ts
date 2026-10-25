@@ -5,26 +5,31 @@ import { createMistral } from "../../src/providers/mistral.ts";
 import {
   closeFully,
   events,
+  type FakeServer,
   fakeServer,
   pause,
   sendUntilError,
   settle,
 } from "./helpers.ts";
 
+// Starts opening a stream against the fake server.
+function connect(mistral: FakeServer, recorded = events(), lang?: string) {
+  return createMistral({ apiKey: "key", model: "model", url: mistral.url })(
+    recorded,
+    { lang },
+  );
+}
+
 // Opens a stream against the fake server and completes the handshake.
-async function open(t: TestContext) {
+async function open(t: TestContext, lang?: string) {
   const mistral = await fakeServer(t);
   const recorded = events();
-  const opening = createMistral({
-    apiKey: "key",
-    model: "model",
-    url: mistral.url,
-  })(recorded, {});
+  const opening = connect(mistral, recorded, lang);
   await mistral.send({ type: "session.created" });
   const stream = await opening;
   t.after(() => closeFully(stream, mistral));
-  await mistral.next(); // session.update
-  return { mistral, recorded, stream };
+  const update = await mistral.next();
+  return { mistral, recorded, stream, update };
 }
 
 test("connects with the model and the API key", async (t) => {
@@ -41,17 +46,9 @@ test("connects with the model and the API key", async (t) => {
 });
 
 test("opens on session.created and then sends the audio format", async (t) => {
-  const mistral = await fakeServer(t);
-  const opening = createMistral({
-    apiKey: "key",
-    model: "model",
-    url: mistral.url,
-  })(events(), {});
-  await mistral.send({ type: "session.created" });
-  const stream = await opening;
-  t.after(() => closeFully(stream, mistral));
+  const { update } = await open(t);
 
-  assert.deepEqual(await mistral.next(), {
+  assert.deepEqual(update, {
     type: "session.update",
     session: { audio_format: { encoding: "pcm_s16le", sample_rate: 16000 } },
   });
@@ -66,31 +63,18 @@ const languageCases: { lang: string; language: string | undefined }[] = [
 
 for (const { lang, language } of languageCases) {
   test(`sends language ${String(language)} for lang ${lang}`, async (t) => {
-    const mistral = await fakeServer(t);
-    const opening = createMistral({
-      apiKey: "key",
-      model: "model",
-      url: mistral.url,
-    })(events(), { lang });
-    await mistral.send({ type: "session.created" });
-    const stream = await opening;
-    t.after(() => closeFully(stream, mistral));
+    const { update } = await open(t, lang);
 
-    const update = (await mistral.next()) as {
-      session: { language?: string };
-    };
-
-    assert.equal(update.session.language, language);
+    assert.equal(
+      (update as { session: { language?: string } }).session.language,
+      language,
+    );
   });
 }
 
 test("fails the open on an error before session.created", async (t) => {
   const mistral = await fakeServer(t);
-  const opening = createMistral({
-    apiKey: "key",
-    model: "model",
-    url: mistral.url,
-  })(events(), {});
+  const opening = connect(mistral);
   await mistral.send({
     type: "error",
     error: { code: 1234, message: "bad model" },
@@ -101,11 +85,7 @@ test("fails the open on an error before session.created", async (t) => {
 
 test("fails the open when Mistral refuses the connection", async (t) => {
   const mistral = await fakeServer(t, { refuse: () => 401 });
-  const opening = createMistral({
-    apiKey: "key",
-    model: "model",
-    url: mistral.url,
-  })(events(), {});
+  const opening = connect(mistral);
 
   await assert.rejects(opening, /HTTP 401/);
 });
@@ -113,11 +93,7 @@ test("fails the open when Mistral refuses the connection", async (t) => {
 test("fails the open without session.created within 10 seconds", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const mistral = await fakeServer(t);
-  const opening = createMistral({
-    apiKey: "key",
-    model: "model",
-    url: mistral.url,
-  })(events(), {});
+  const opening = connect(mistral);
   await mistral.connection;
 
   t.mock.timers.tick(10_000);
@@ -137,11 +113,7 @@ test("fails the stream when the provider does not keep up", async (t) => {
 test("ignores transcription messages before the stream is open", async (t) => {
   const mistral = await fakeServer(t);
   const recorded = events();
-  const opening = createMistral({
-    apiKey: "key",
-    model: "model",
-    url: mistral.url,
-  })(recorded, {});
+  const opening = connect(mistral, recorded);
   await mistral.send({ type: "transcription.text.delta", text: "early" });
   await mistral.send({ type: "transcription.done" });
   await mistral.send({ type: "session.created" });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { connect, type AddressInfo } from "node:net";
 import { once } from "node:events";
-import { test } from "node:test";
+import { type TestContext, test } from "node:test";
 import { type JWTPayload, SignJWT } from "jose";
 import type {
   OpenStream,
@@ -508,26 +508,102 @@ test("sends ready only after the provider stream is open", async (t) => {
   await nextMessage(ws);
 });
 
-test("finishes the utterance on end and ignores other text frames", async (t) => {
+// Connects with a fake provider that is already open.
+async function openWithFake(t: TestContext) {
   const fake = fakeProvider();
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
-
   const ws = listen(base, await sign());
   const ready = nextMessage(ws);
   fake.open();
   await ready;
+  return { fake, ws };
+}
 
+// Waits until the provider received `count` audio frames, without a timer, so
+// it also works while timers are mocked.
+async function untilChunks(fake: { chunks: Buffer[] }, count: number) {
+  while (fake.chunks.length < count) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+test("finishes the utterance on end and ignores other text frames", async (t) => {
+  const { fake, ws } = await openWithFake(t);
+
+  ws.send(new Uint8Array([1]));
   ws.send("not json");
   ws.send(JSON.stringify({ type: "other" }));
   ws.send(JSON.stringify({ type: "end" }));
   // The binary frame after the text frames shows they were all handled.
-  ws.send(new Uint8Array([7]));
-  while (fake.chunks.length === 0) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+  ws.send(new Uint8Array([2]));
+  await untilChunks(fake, 2);
 
   assert.equal(fake.finished, 1);
+});
+
+test("sends an empty final on end without audio, without asking the provider", async (t) => {
+  const { fake, ws } = await openWithFake(t);
+
+  const final = nextMessage(ws);
+  ws.send(JSON.stringify({ type: "end" }));
+
+  assert.deepEqual(JSON.parse((await final).data), {
+    type: "transcript",
+    text: "",
+    final: true,
+  });
+  assert.equal(fake.finished, 0);
+});
+
+test("ignores end while a finish waits, and finishes again after the final", async (t) => {
+  const { fake, ws } = await openWithFake(t);
+  const finals: string[] = [];
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data as string) as {
+      text?: string;
+      final?: boolean;
+    };
+    if (message.final) {
+      finals.push(message.text ?? "");
+    }
+  };
+
+  ws.send(new Uint8Array([1]));
+  ws.send(JSON.stringify({ type: "end" }));
+  ws.send(JSON.stringify({ type: "end" }));
+  ws.send(new Uint8Array([2]));
+  await untilChunks(fake, 2);
+  // The second end neither asked the provider nor sent an empty final.
+  assert.equal(fake.finished, 1);
+  assert.deepEqual(finals, []);
+
+  // The answer to the first finish; audio [2] came after it was asked.
+  fake.report({ text: "add a note", final: true });
+  ws.send(JSON.stringify({ type: "end" }));
+  ws.send(new Uint8Array([3]));
+  await untilChunks(fake, 3);
+
+  assert.deepEqual(finals, ["add a note"]);
+  assert.equal(fake.finished, 2);
+});
+
+test("finishes the utterance 5 seconds after the last audio", async (t) => {
+  const { fake, ws } = await openWithFake(t);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  ws.send(new Uint8Array([1]));
+  await untilChunks(fake, 1);
+  t.mock.timers.tick(4999);
+  ws.send(new Uint8Array([2]));
+  await untilChunks(fake, 2);
+  t.mock.timers.tick(4999);
+  assert.equal(fake.finished, 0);
+  t.mock.timers.tick(1);
+  assert.equal(fake.finished, 1);
+
+  // Real timers again before the sockets close.
+  t.mock.timers.reset();
 });
 
 test("does not forward text frames to the provider", async (t) => {

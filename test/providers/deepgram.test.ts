@@ -225,31 +225,13 @@ test("collects segments into interims and sends one final on Finalize", async (t
   ]);
 });
 
-test("finalizes 1 second after the last audio", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const { deepgram, recorded, stream } = await open(t);
+test("sends an empty final for a Finalize answer without text", async (t) => {
+  const { deepgram, recorded } = await open(t);
 
-  stream.sendAudio(Buffer.from([1]));
-  await deepgram.next();
-  t.mock.timers.tick(999);
-  stream.sendAudio(Buffer.from([2]));
-  await deepgram.next();
-  // A Finalize sent too early would arrive before the next frame.
-  t.mock.timers.tick(999);
-  stream.sendAudio(Buffer.from([3]));
-  assert.deepEqual(await deepgram.next(), Buffer.from([3]));
-  t.mock.timers.tick(1000);
-
-  assert.deepEqual(await deepgram.next(), { type: "Finalize" });
-
-  await deepgram.send(results("add a note", { is_final: true }));
   await deepgram.send(results("", { is_final: true, from_finalize: true }));
   await settle();
 
-  assert.deepEqual(recorded.transcripts.at(-1), {
-    text: "add a note",
-    final: true,
-  });
+  assert.deepEqual(recorded.transcripts, [{ text: "", final: true }]);
 });
 
 test("finalizes at once when the utterance is finished", async (t) => {
@@ -282,7 +264,7 @@ test("closes the socket on close", async (t) => {
   await closed;
 });
 
-test("sends collected text as a final, then reports an unexpected close", async (t) => {
+test("discards collected text and reports an unexpected close", async (t) => {
   const { deepgram, recorded } = await open(t);
 
   await deepgram.send(results("add a note", { is_final: true }));
@@ -290,10 +272,9 @@ test("sends collected text as a final, then reports an unexpected close", async 
   await once((await deepgram.connection).socket, "close");
   await settle();
 
-  assert.deepEqual(recorded.transcripts.at(-1), {
-    text: "add a note",
-    final: true,
-  });
+  assert.deepEqual(recorded.transcripts, [
+    { text: "add a note", final: false },
+  ]);
   assert.equal(
     recorded.errors[0]?.message,
     'Deepgram closed the connection: 1011 "timeout"',

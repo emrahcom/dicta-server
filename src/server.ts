@@ -5,13 +5,19 @@ import { errors, jwtVerify } from "jose";
 import { WebSocketServer, type WebSocket } from "ws";
 import { quoteForLog } from "./logging.ts";
 import { parseMessage } from "./providers/messages.ts";
-import type { OpenStream, ProviderStream } from "./providers/provider.ts";
+import type {
+  OpenStream,
+  ProviderStream,
+  Transcript,
+} from "./providers/provider.ts";
 
 const LISTEN_PATH = "/dicta/v1/listen";
 // The WebSocket protocol name; the JWT follows it in Sec-WebSocket-Protocol.
 const PROTOCOL = "dicta";
 const MAX_FRAME_BYTES = 64 * 1024;
 const HEARTBEAT_INTERVAL_MS = 30_000;
+// Without `end`, an utterance is finished this long after its last audio frame.
+const FINISH_AFTER_MS = 5000;
 const PROVIDER_ERROR_MESSAGE = "speech-to-text provider failed";
 // A BCP 47 tag: a language code of 2 or 3 letters, then optional subtags.
 const LANG_TAG = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/;
@@ -155,14 +161,27 @@ export function createServer({
       }
     };
 
+    const sendTranscript = (transcript: Transcript) => {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({ type: "transcript", ...transcript }));
+      }
+    };
+
+    // The current utterance (architecture.md, Providers): whether audio came
+    // since the last final, and whether a finish waits for its answer.
+    let audioSinceFinal = false;
+    let finishing = false;
+    let finishTimer: NodeJS.Timeout | undefined;
+
     let stream: ProviderStream;
     try {
       stream = await openStream(
         {
           onTranscript: guard((transcript) => {
-            if (ws.readyState === ws.OPEN) {
-              ws.send(JSON.stringify({ type: "transcript", ...transcript }));
+            if (transcript.final) {
+              finishing = false;
             }
+            sendTranscript(transcript);
           }),
           onError: guard(fail),
           onWarning: guard((warning) =>
@@ -179,18 +198,41 @@ export function createServer({
       stream.close();
       return;
     }
+    // Finishes the utterance on `end` or after FINISH_AFTER_MS without audio.
+    // Without audio since the last final, the provider is not asked: the final
+    // is empty (Mistral even fails a flush without audio).
+    const finishUtterance = () => {
+      clearTimeout(finishTimer);
+      if (finishing) {
+        return;
+      }
+      if (!audioSinceFinal) {
+        sendTranscript({ text: "", final: true });
+        return;
+      }
+      audioSinceFinal = false;
+      finishing = true;
+      stream.finish();
+    };
+
     ws.on(
       "close",
-      guard(() => stream.close()),
+      guard(() => {
+        clearTimeout(finishTimer);
+        stream.close();
+      }),
     );
     ws.on(
       "message",
       guard((data, isBinary) => {
         try {
           if (isBinary) {
+            audioSinceFinal = true;
             stream.sendAudio(data as Buffer);
+            clearTimeout(finishTimer);
+            finishTimer = setTimeout(guard(finishUtterance), FINISH_AFTER_MS);
           } else if (isEndMessage(data as Buffer)) {
-            stream.finish();
+            finishUtterance();
           }
         } catch (err) {
           fail(err);

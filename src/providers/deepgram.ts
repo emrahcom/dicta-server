@@ -21,7 +21,6 @@ export const DEEPGRAM_DEFAULT_MODEL = "nova-3";
 
 const DEEPGRAM_URL = "wss://api.deepgram.com/v1/listen";
 const OPEN_TIMEOUT_MS = 10_000;
-const FINALIZE_AFTER_MS = 1000;
 const KEEPALIVE_INTERVAL_MS = 4000;
 
 export function createDeepgram({
@@ -62,7 +61,6 @@ export function createDeepgram({
       let state: "opening" | "open" | "closed" = "opening";
       // Finished segments of the current utterance.
       let segments: string[] = [];
-      let finalizeTimer: NodeJS.Timeout | undefined;
       let keepAlive: NodeJS.Timeout | undefined;
 
       const openTimer = setTimeout(
@@ -78,22 +76,20 @@ export function createDeepgram({
         }
       };
 
+      // The answer to Finalize is the final of the utterance, also when empty.
       const sendFinal = () => {
         const text = segments.join(" ");
         segments = [];
-        if (text) {
-          onTranscript({ text, final: true });
-        }
+        onTranscript({ text, final: true });
       };
 
       const stopTimers = () => {
         clearTimeout(openTimer);
-        clearTimeout(finalizeTimer);
         clearInterval(keepAlive);
       };
 
       // Ends the stream on any failure. Before it is open, it rejects the open.
-      // After it, it sends the collected text as a final and reports the error.
+      // After it, it reports the error.
       const fail = (err: unknown) => {
         const error = err instanceof Error ? err : new Error(String(err));
         const wasOpen = state === "open";
@@ -103,8 +99,8 @@ export function createDeepgram({
         state = "closed";
         stopTimers();
         ws.terminate();
+        // The unfinished utterance is discarded, never sent as a final.
         if (wasOpen) {
-          sendFinal();
           onError(error);
         } else {
           reject(error);
@@ -117,7 +113,6 @@ export function createDeepgram({
         if (state !== "open") {
           return;
         }
-        clearTimeout(finalizeTimer);
         send({ type: "Finalize" });
       };
 
@@ -131,8 +126,6 @@ export function createDeepgram({
             return;
           }
           ws.send(chunk);
-          clearTimeout(finalizeTimer);
-          finalizeTimer = setTimeout(finish, FINALIZE_AFTER_MS);
         },
         finish,
         close() {

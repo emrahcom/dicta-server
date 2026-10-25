@@ -189,25 +189,8 @@ test("reports deltas as interims, also across a period", async (t) => {
   ]);
 });
 
-test("flushes 1 second after the last audio and sends the rest as a final", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const { mistral, recorded, stream } = await open(t);
-
-  stream.sendAudio(Buffer.from([1]));
-  await mistral.next(); // input_audio.append
-  t.mock.timers.tick(999);
-  stream.sendAudio(Buffer.from([2]));
-  await mistral.next(); // input_audio.append
-  // A flush sent too early would arrive before the next frame.
-  t.mock.timers.tick(999);
-  stream.sendAudio(Buffer.from([3]));
-  assert.deepEqual(await mistral.next(), {
-    type: "input_audio.append",
-    audio: Buffer.from([3]).toString("base64"),
-  });
-  t.mock.timers.tick(1000);
-
-  assert.deepEqual(await mistral.next(), { type: "input_audio.flush" });
+test("sends the text since the last final as the final of a flush", async (t) => {
+  const { mistral, recorded } = await open(t);
 
   await mistral.send({ type: "transcription.text.delta", text: "add a note" });
   await mistral.send({ type: "transcription.done" });
@@ -219,7 +202,16 @@ test("flushes 1 second after the last audio and sends the rest as a final", asyn
   });
 });
 
-test("sends pending text as a final, then reports a Mistral error", async (t) => {
+test("sends an empty final for a flush without text", async (t) => {
+  const { mistral, recorded } = await open(t);
+
+  await mistral.send({ type: "transcription.done" });
+  await settle();
+
+  assert.deepEqual(recorded.transcripts, [{ text: "", final: true }]);
+});
+
+test("discards pending text and reports a Mistral error", async (t) => {
   const { mistral, recorded } = await open(t);
 
   await mistral.send({ type: "transcription.text.delta", text: "add a" });
@@ -229,10 +221,7 @@ test("sends pending text as a final, then reports a Mistral error", async (t) =>
   });
   await settle();
 
-  assert.deepEqual(recorded.transcripts.at(-1), {
-    text: "add a",
-    final: true,
-  });
+  assert.deepEqual(recorded.transcripts, [{ text: "add a", final: false }]);
   assert.equal(
     recorded.errors[0]?.message,
     'Mistral error: "3804 {\\"detail\\":\\"idle\\"}"',
@@ -248,7 +237,7 @@ test("quotes the error description, so it cannot break a log line", async (t) =>
   assert.equal(recorded.errors[0]?.message, 'Mistral error: "bad\\nthing"');
 });
 
-test("sends pending text as a final, then reports an unexpected close", async (t) => {
+test("discards pending text and reports an unexpected close", async (t) => {
   const { mistral, recorded } = await open(t);
 
   await mistral.send({ type: "transcription.text.delta", text: "add a" });
@@ -256,10 +245,7 @@ test("sends pending text as a final, then reports an unexpected close", async (t
   await once((await mistral.connection).socket, "close");
   await settle();
 
-  assert.deepEqual(recorded.transcripts.at(-1), {
-    text: "add a",
-    final: true,
-  });
+  assert.deepEqual(recorded.transcripts, [{ text: "add a", final: false }]);
   assert.match(recorded.errors[0]?.message ?? "", /closed the connection/);
 });
 

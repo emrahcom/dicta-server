@@ -19,7 +19,6 @@ export const MISTRAL_DEFAULT_MODEL = "voxtral-mini-transcribe-realtime-3";
 
 const MISTRAL_URL = "wss://api.mistral.ai/v1/audio/transcriptions/realtime";
 const OPEN_TIMEOUT_MS = 10_000;
-const FLUSH_AFTER_MS = 1000;
 
 export function createMistral({
   apiKey,
@@ -38,23 +37,21 @@ export function createMistral({
       let state: "opening" | "open" | "closed" = "opening";
       // Text received since the last final.
       let pending = "";
-      let flushTimer: NodeJS.Timeout | undefined;
 
       const openTimer = setTimeout(
         () => fail(new Error("no session.created within 10 seconds")),
         OPEN_TIMEOUT_MS,
       );
 
+      // The answer to a flush is the final of the utterance, also when empty.
       const sendFinal = () => {
         const text = pending.trim();
         pending = "";
-        if (text) {
-          onTranscript({ text, final: true });
-        }
+        onTranscript({ text, final: true });
       };
 
       // Ends the stream on any failure. Before it is open, it rejects the open.
-      // After it, it sends the pending text as a final and reports the error.
+      // After it, it reports the error.
       const fail = (err: unknown) => {
         const error = err instanceof Error ? err : new Error(String(err));
         const wasOpen = state === "open";
@@ -63,10 +60,9 @@ export function createMistral({
         }
         state = "closed";
         clearTimeout(openTimer);
-        clearTimeout(flushTimer);
         ws.terminate();
+        // The unfinished utterance is discarded, never sent as a final.
         if (wasOpen) {
-          sendFinal();
           onError(error);
         } else {
           reject(error);
@@ -79,7 +75,6 @@ export function createMistral({
         if (state !== "open") {
           return;
         }
-        clearTimeout(flushTimer);
         try {
           ws.send(JSON.stringify({ type: "input_audio.flush" }));
         } catch (err) {
@@ -102,14 +97,11 @@ export function createMistral({
               audio: chunk.toString("base64"),
             }),
           );
-          clearTimeout(flushTimer);
-          flushTimer = setTimeout(finish, FLUSH_AFTER_MS);
         },
         finish,
         close() {
           state = "closed";
           clearTimeout(openTimer);
-          clearTimeout(flushTimer);
           ws.close();
         },
       };

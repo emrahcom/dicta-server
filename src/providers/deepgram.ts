@@ -107,15 +107,6 @@ export function createDeepgram({
         }
       };
 
-      // Asks Deepgram to finalize: the collected text comes as a final with
-      // from_finalize.
-      const finish = () => {
-        if (state !== "open") {
-          return;
-        }
-        send({ type: "Finalize" });
-      };
-
       const stream: ProviderStream = {
         sendAudio(chunk) {
           if (state !== "open") {
@@ -127,7 +118,14 @@ export function createDeepgram({
           }
           ws.send(chunk);
         },
-        finish,
+        // Asks Deepgram to finalize: the collected text comes as a final with
+        // from_finalize.
+        finish() {
+          if (state !== "open") {
+            return;
+          }
+          send({ type: "Finalize" });
+        },
         close() {
           state = "closed";
           stopTimers();

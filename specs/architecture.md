@@ -49,8 +49,9 @@ Message formats are in `contract-protocol.md`.
 - When audio came since the last final, the server asks the provider to finish,
   and the provider's answer becomes the final, with empty text when nothing was
   recognized. When no audio came, the server sends an empty final itself and
-  does not ask the provider. While a finish waits for its answer, another `end`
-  does nothing.
+  does not ask the provider. While a finish waits for its answer, an `end` is
+  kept and handled right after that answer, so the next utterance is finished
+  too.
 - So each finished utterance gets exactly one final, and never before it is
   finished, so a pause inside a command does not split it.
 - The provider and its API key come from the server configuration.

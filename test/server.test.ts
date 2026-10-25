@@ -55,15 +55,6 @@ function nextMessage(ws: WebSocket): Promise<MessageEvent> {
   });
 }
 
-// Resolves with the close code, and fails if a message arrives first.
-function closeCode(ws: WebSocket): Promise<number> {
-  return new Promise((resolve, reject) => {
-    ws.onclose = (event) => resolve(event.code);
-    ws.onmessage = (event) =>
-      reject(new Error(`unexpected message: ${event.data}`));
-  });
-}
-
 test("answers with the dicta protocol", async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);
@@ -81,7 +72,7 @@ test("does not accept a token in the URL", async (t) => {
 
   const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
 
-  assert.equal(await closeCode(ws), 4001);
+  assert.deepEqual(await untilClose(ws), { messages: [], code: 4001 });
   assert.match(warned.mock.calls[0].arguments[0], /token rejected: missing$/);
 });
 
@@ -130,7 +121,7 @@ for (const { name, token, reason } of rejections) {
     const value = await token();
     const ws = listen(base, value);
 
-    assert.equal(await closeCode(ws), 4001);
+    assert.deepEqual(await untilClose(ws), { messages: [], code: 4001 });
     assert.match(
       warned.mock.calls[0].arguments[0],
       new RegExp(`^\\[[0-9a-f-]+\\] token rejected: ${reason}$`),
@@ -491,6 +482,7 @@ test("finishes the utterance on end and ignores other text frames", async (t) =>
   await untilChunks(fake, 2);
 
   assert.equal(fake.finished, 1);
+  assert.deepEqual(Buffer.concat(fake.chunks), Buffer.from([1, 2]));
 });
 
 test("sends an empty final on end without audio, without asking the provider", async (t) => {
@@ -561,19 +553,6 @@ test("finishes the utterance 5 seconds after the last audio", async (t) => {
 
   // Real timers again before the sockets close.
   t.mock.timers.reset();
-});
-
-test("does not forward text frames to the provider", async (t) => {
-  const { fake, ws } = await openWithFake(t);
-
-  ws.send("not audio");
-  ws.send(new Uint8Array([7]));
-  // The binary frame after the text frame shows the text frame was handled.
-  while (fake.chunks.length === 0) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-
-  assert.deepEqual(Buffer.concat(fake.chunks), Buffer.from([7]));
 });
 
 test("forwards audio to the provider and transcripts to the client", async (t) => {

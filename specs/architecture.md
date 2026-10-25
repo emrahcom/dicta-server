@@ -96,8 +96,7 @@ Message formats are in `contract-protocol.md`.
 
 ### deepgram
 
-- Deepgram's live transcription API over a WebSocket, with smart formatting and
-  an endpointing of 500 ms.
+- Deepgram's live transcription API over a WebSocket, with smart formatting.
 - The stream is open when the WebSocket opens.
 - Audio is forwarded as it is.
 - The language tag is sent as it is, and without one the language is English.

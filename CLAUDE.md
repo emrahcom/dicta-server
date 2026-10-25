@@ -17,6 +17,12 @@ Node.js 24 or later and TypeScript (strict).
   `YYYY-MM-DD-HHMMSS-slug.md` (UTC). The folder is the status. `specs/tasks.md`
   defines the format, including how findings are handled.
 
+## User documents
+
+The README and other user documents use simple English: short sentences, common
+words, one idea per sentence. Most readers know English as a second language.
+Specs are internal and not covered by this rule.
+
 ## Verification commands
 
 Run them after every change.

@@ -1,8 +1,7 @@
 # Product
 
-dicta lets users control a web application by voice. The application registers
-its actions, the user speaks, and dicta turns the speech into something the
-application can act on.
+dicta lets users tell a web application what they want, by typing or by
+speaking. dicta turns the input into something the application can act on.
 
 dicta-server is the server side. It receives a user's microphone audio from
 `dicta-js`, sends it to a speech-to-text provider and returns the transcripts.
@@ -21,7 +20,7 @@ dicta-server is the server side. It receives a user's microphone audio from
 - Not a media server. No WebRTC, no rooms, no multi-party calls.
 - Not a speech-to-text engine. It uses providers, it does not run models.
 - Not a general-purpose transcription service. Using it for plain speech-to-text
-  works, but features are driven by voice control.
+  works, but features are driven by what applications need from user input.
 
 ## First version
 

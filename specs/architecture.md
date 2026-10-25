@@ -45,6 +45,8 @@ Message formats are in `contract-protocol.md`.
   finish an utterance, receive interim and final transcripts, close.
 - The server finishes an utterance when the client sends `end`, or after 1
   second without audio frames. The provider then sends what it has as a final.
+  Each utterance gets at most one final, and never before it is finished, so a
+  pause inside a command does not split it.
 - The provider and its API key come from the server configuration.
 - The provider stream is opened after the token is accepted and closed with the
   connection. `ready` is sent only after it is open, so the server never buffers
@@ -104,8 +106,9 @@ Message formats are in `contract-protocol.md`.
   not support at all fails the open.
 - Deepgram sends results per segment. Finished segments are collected, and each
   result is sent as an interim with the collected text and the current segment.
-- A final is sent when Deepgram marks the end of speech (`speech_final`) or
-  answers a `Finalize`, which the server sends when it finishes an utterance.
+- A final is sent only when Deepgram answers a `Finalize`, which the server
+  sends when it finishes an utterance. Deepgram's own end of speech
+  (`speech_final`) does not end the utterance.
 - A `KeepAlive` every 4 seconds keeps the stream open, since Deepgram closes it
   after 10 seconds without audio.
 - When Deepgram fails, collected text is sent as a final first.

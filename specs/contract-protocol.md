@@ -62,6 +62,11 @@ is connected. The client starts sending audio after it.
 it replaces the previous interim and may still change. `final: true` is final:
 it never changes, and the next transcript starts new text.
 
+Each utterance with recognized speech gets exactly one final, when it is
+finished: after the client's `end`, or about 1 second after the audio stops. An
+utterance without recognized speech gets no final, so the client does not wait
+for one forever.
+
 ```json
 { "type": "transcript", "text": "add a note", "final": false }
 ```

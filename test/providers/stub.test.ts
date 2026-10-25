@@ -27,6 +27,29 @@ test("reports the total bytes as interims, then a final after 1 second", async (
   assert.deepEqual(transcripts.at(-1), { text: "150 bytes", final: true });
 });
 
+test("sends the final at once when the utterance is finished", async () => {
+  const transcripts: Transcript[] = [];
+  const stream = await openStubStream(
+    {
+      onTranscript: (transcript) => transcripts.push(transcript),
+      onError: () => {},
+      onWarning: () => {},
+    },
+    {},
+  );
+
+  stream.finish();
+  stream.sendAudio(Buffer.alloc(10));
+  stream.finish();
+  stream.finish();
+  stream.close();
+
+  assert.deepEqual(transcripts, [
+    { text: "10 bytes", final: false },
+    { text: "10 bytes", final: true },
+  ]);
+});
+
 test("sends no final after close", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const transcripts: Transcript[] = [];

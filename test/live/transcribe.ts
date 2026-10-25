@@ -62,11 +62,12 @@ export async function transcribeFixture(
     };
   });
 
-  // At real-time pace, then stop, as push-to-talk does.
+  // At real-time pace, then end the utterance, as push-to-talk does.
   for (let i = 0; i < pcm.length; i += FRAME_BYTES) {
     ws.send(pcm.subarray(i, i + FRAME_BYTES));
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+  ws.send(JSON.stringify({ type: "end" }));
   await new Promise((resolve) => setTimeout(resolve, WAIT_AFTER_AUDIO_MS));
   closing = true;
   ws.close();

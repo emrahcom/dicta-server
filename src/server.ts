@@ -4,6 +4,7 @@ import type { Duplex } from "node:stream";
 import { errors, jwtVerify } from "jose";
 import { WebSocketServer, type WebSocket } from "ws";
 import { quoteForLog } from "./logging.ts";
+import { parseMessage } from "./providers/messages.ts";
 import type { OpenStream, ProviderStream } from "./providers/provider.ts";
 
 const LISTEN_PATH = "/dicta/v1/listen";
@@ -185,11 +186,12 @@ export function createServer({
     ws.on(
       "message",
       guard((data, isBinary) => {
-        if (!isBinary) {
-          return;
-        }
         try {
-          stream.sendAudio(data as Buffer);
+          if (isBinary) {
+            stream.sendAudio(data as Buffer);
+          } else if (isEndMessage(data as Buffer)) {
+            stream.finish();
+          }
         } catch (err) {
           fail(err);
         }
@@ -219,6 +221,11 @@ export function createServer({
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+// A text frame {"type":"end"} from the client. Other text frames are ignored.
+function isEndMessage(raw: Buffer): boolean {
+  return parseMessage<{ type?: unknown }>(raw)?.type === "end";
 }
 
 // The JWT is the entry after "dicta" in the Sec-WebSocket-Protocol header.

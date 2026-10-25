@@ -255,6 +255,16 @@ test("finalizes 1 second after the last audio", async (t) => {
   });
 });
 
+test("finalizes at once when the utterance is finished", async (t) => {
+  const { deepgram, stream } = await open(t);
+
+  stream.sendAudio(Buffer.from([1]));
+  await deepgram.next();
+  stream.finish();
+
+  assert.deepEqual(await deepgram.next(), { type: "Finalize" });
+});
+
 test("sends KeepAlive every 4 seconds", async (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
   const { deepgram } = await open(t);

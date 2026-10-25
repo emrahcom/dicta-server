@@ -152,6 +152,16 @@ test("ignores transcription messages before the stream is open", async (t) => {
   assert.deepEqual(recorded.transcripts, []);
 });
 
+test("flushes at once when the utterance is finished", async (t) => {
+  const { mistral, stream } = await open(t);
+
+  stream.sendAudio(Buffer.from([1]));
+  await mistral.next(); // input_audio.append
+  stream.finish();
+
+  assert.deepEqual(await mistral.next(), { type: "input_audio.flush" });
+});
+
 test("sends audio as base64", async (t) => {
   const { mistral, stream } = await open(t);
 

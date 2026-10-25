@@ -204,6 +204,7 @@ function fakeProvider() {
   const fake = {
     chunks: [] as Buffer[],
     closed: false,
+    finished: 0,
     sendAudioThrows: false,
     closeThrows: false,
     report: (_transcript: Transcript) => {},
@@ -230,6 +231,9 @@ function fakeProvider() {
           throw new Error("send failed with secret details");
         }
         fake.chunks.push(chunk);
+      },
+      finish: () => {
+        fake.finished++;
       },
       close: () => {
         fake.closed = true;
@@ -502,6 +506,28 @@ test("sends ready only after the provider stream is open", async (t) => {
 
   fake.open();
   await nextMessage(ws);
+});
+
+test("finishes the utterance on end and ignores other text frames", async (t) => {
+  const fake = fakeProvider();
+  const { base, shutdown } = await start({ openStream: fake.openStream });
+  t.after(shutdown);
+
+  const ws = listen(base, await sign());
+  const ready = nextMessage(ws);
+  fake.open();
+  await ready;
+
+  ws.send("not json");
+  ws.send(JSON.stringify({ type: "other" }));
+  ws.send(JSON.stringify({ type: "end" }));
+  // The binary frame after the text frames shows they were all handled.
+  ws.send(new Uint8Array([7]));
+  while (fake.chunks.length === 0) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  assert.equal(fake.finished, 1);
 });
 
 test("does not forward text frames to the provider", async (t) => {

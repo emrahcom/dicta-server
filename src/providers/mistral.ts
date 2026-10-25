@@ -73,6 +73,20 @@ export function createMistral({
         }
       };
 
+      // Asks Mistral to flush: the text of the utterance comes as a final with
+      // transcription.done.
+      const finish = () => {
+        if (state !== "open") {
+          return;
+        }
+        clearTimeout(flushTimer);
+        try {
+          ws.send(JSON.stringify({ type: "input_audio.flush" }));
+        } catch (err) {
+          fail(err);
+        }
+      };
+
       const stream: ProviderStream = {
         sendAudio(chunk) {
           if (state !== "open") {
@@ -89,14 +103,9 @@ export function createMistral({
             }),
           );
           clearTimeout(flushTimer);
-          flushTimer = setTimeout(() => {
-            try {
-              ws.send(JSON.stringify({ type: "input_audio.flush" }));
-            } catch (err) {
-              fail(err);
-            }
-          }, FLUSH_AFTER_MS);
+          flushTimer = setTimeout(finish, FLUSH_AFTER_MS);
         },
+        finish,
         close() {
           state = "closed";
           clearTimeout(openTimer);

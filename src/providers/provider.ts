@@ -2,6 +2,8 @@ export type Transcript = { text: string; final: boolean };
 
 export type ProviderStream = {
   sendAudio: (chunk: Buffer) => void;
+  // Ends the current utterance: what the provider has comes as a final.
+  finish: () => void;
   close: () => void;
 };
 

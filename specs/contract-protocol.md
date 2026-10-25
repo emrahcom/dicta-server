@@ -5,14 +5,19 @@ The contract between `dicta-js` and dicta-server. Both repos follow this file.
 ## Connection
 
 ```
-wss://<host>/dicta/v1/listen?token=<jwt>&lang=<tag>
+wss://<host>/dicta/v1/listen?lang=<tag>
+Sec-WebSocket-Protocol: dicta, <jwt>
 ```
+
+In a browser: `new WebSocket(url, ["dicta", jwt])`.
 
 - All server paths start with `/dicta/`, so a reverse proxy can route them with
   one rule and no rewrite.
-- `token` is the JWT issued by the application's backend. It is a query
-  parameter because browsers cannot set headers on a WebSocket. The server must
-  not log it.
+- The JWT issued by the application's backend goes in the
+  `Sec-WebSocket-Protocol` header, after the protocol name `dicta`. It is the
+  only header a browser can set on a WebSocket, and unlike the URL it is not in
+  the default access logs of reverse proxies. The server answers with
+  `Sec-WebSocket-Protocol: dicta`. The server must not log the token.
 - A missing, invalid or expired token: the server closes the socket with code
   `4001`.
 - `lang` is optional: the language the user speaks, as a BCP 47 tag such as

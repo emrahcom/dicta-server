@@ -59,7 +59,6 @@ test("connects with the parameters and the API key", async (t) => {
     sample_rate: "16000",
     channels: "1",
     interim_results: "true",
-    endpointing: "500",
     smart_format: "true",
     mip_opt_out: "true",
   });

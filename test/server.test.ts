@@ -41,6 +41,14 @@ function sign(
   return jwt.sign(new TextEncoder().encode(options.secret ?? SECRET));
 }
 
+// Connects as dicta-js does: the token goes in Sec-WebSocket-Protocol.
+function listen(base: string, token: string | null, query = "") {
+  return new WebSocket(
+    `${base}/dicta/v1/listen${query}`,
+    token === null ? [] : ["dicta", token],
+  );
+}
+
 function nextMessage(ws: WebSocket): Promise<MessageEvent> {
   return new Promise((resolve) => {
     ws.onmessage = resolve;
@@ -56,11 +64,32 @@ function closeCode(ws: WebSocket): Promise<number> {
   });
 }
 
+test("answers with the dicta protocol", async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+
+  const ws = listen(base, await sign());
+  await nextMessage(ws);
+
+  assert.equal(ws.protocol, "dicta");
+});
+
+test("does not accept a token in the URL", async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+  const warned = t.mock.method(console, "warn", () => {});
+
+  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+
+  assert.equal(await closeCode(ws), 4001);
+  assert.match(warned.mock.calls[0].arguments[0], /token rejected: missing$/);
+});
+
 test("sends ready with a session id for a valid token", async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   const message = JSON.parse((await nextMessage(ws)).data);
 
   assert.equal(message.type, "ready");
@@ -99,8 +128,7 @@ for (const { name, token, reason } of rejections) {
     const warned = t.mock.method(console, "warn", () => {});
 
     const value = await token();
-    const query = value === null ? "" : `?token=${value}`;
-    const ws = new WebSocket(`${base}/dicta/v1/listen${query}`);
+    const ws = listen(base, value);
 
     assert.equal(await closeCode(ws), 4001);
     assert.match(
@@ -115,9 +143,7 @@ test("logs connected with the sub of the token", async (t) => {
   t.after(shutdown);
   const logged = t.mock.method(console, "log", () => {});
 
-  const ws = new WebSocket(
-    `${base}/dicta/v1/listen?token=${await sign({ sub: "user-1" })}`,
-  );
+  const ws = listen(base, await sign({ sub: "user-1" }));
   const { sessionId } = JSON.parse((await nextMessage(ws)).data);
 
   assert.equal(
@@ -137,7 +163,7 @@ test("does not log a sub that is not a string", async (t) => {
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("1h")
     .sign(new TextEncoder().encode(SECRET));
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${token}`);
+  const ws = listen(base, token);
   const { sessionId } = JSON.parse((await nextMessage(ws)).data);
 
   assert.equal(logged.mock.calls[0].arguments[0], `[${sessionId}] connected`);
@@ -148,7 +174,7 @@ test("logs connected without sub when the token has none", async (t) => {
   t.after(shutdown);
   const logged = t.mock.method(console, "log", () => {});
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   const { sessionId } = JSON.parse((await nextMessage(ws)).data);
 
   assert.equal(logged.mock.calls[0].arguments[0], `[${sessionId}] connected`);
@@ -237,7 +263,7 @@ test("sends error and closes with 1011 when the provider cannot open", async (t)
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   const result = untilClose(ws);
   await new Promise((resolve) => setTimeout(resolve, 50));
   fake.failOpen(new Error("open failed with secret details"));
@@ -250,7 +276,7 @@ test("sends error and closes with 1011 when an open stream fails", async (t) => 
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   const ready = nextMessage(ws);
   fake.open();
   await ready;
@@ -263,8 +289,8 @@ test("sends error and closes with 1011 when an open stream fails", async (t) => 
 });
 
 const langCases: { name: string; query: string; lang: string | undefined }[] = [
-  { name: "a well-formed lang", query: "&lang=de-DE", lang: "de-DE" },
-  { name: "a three-letter lang", query: "&lang=ceb", lang: "ceb" },
+  { name: "a well-formed lang", query: "?lang=de-DE", lang: "de-DE" },
+  { name: "a three-letter lang", query: "?lang=ceb", lang: "ceb" },
   { name: "no lang", query: "", lang: undefined },
 ];
 
@@ -274,9 +300,7 @@ for (const { name, query, lang } of langCases) {
     const { base, shutdown } = await start({ openStream: fake.openStream });
     t.after(shutdown);
 
-    const ws = new WebSocket(
-      `${base}/dicta/v1/listen?token=${await sign()}${query}`,
-    );
+    const ws = listen(base, await sign(), query);
     const ready = nextMessage(ws);
     fake.open();
     await ready;
@@ -292,9 +316,7 @@ test("drops a malformed lang with a warning", async (t) => {
   const warned = t.mock.method(console, "warn", () => {});
 
   const lang = encodeURIComponent("de_DE\n");
-  const ws = new WebSocket(
-    `${base}/dicta/v1/listen?token=${await sign()}&lang=${lang}`,
-  );
+  const ws = listen(base, await sign(), `?lang=${lang}`);
   const ready = nextMessage(ws);
   fake.open();
   const { sessionId } = JSON.parse((await ready).data);
@@ -312,7 +334,7 @@ test("logs provider warnings with the session id and keeps the connection", asyn
   t.after(shutdown);
   const warned = t.mock.method(console, "warn", () => {});
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   const ready = nextMessage(ws);
   fake.open();
   const { sessionId } = JSON.parse((await ready).data);
@@ -331,7 +353,7 @@ test("prefixes connection logs with the session id from ready", async (t) => {
   t.after(shutdown);
   const logged = t.mock.method(console, "error", () => {});
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   const ready = nextMessage(ws);
   fake.open();
   const { sessionId } = JSON.parse((await ready).data);
@@ -350,7 +372,7 @@ test("sends error and closes with 1011 when sending audio throws", async (t) => 
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   const ready = nextMessage(ws);
   fake.open();
   await ready;
@@ -373,7 +395,7 @@ test("closes with 1011 and keeps serving after an unexpected error", async (t) =
     return stringify(value);
   });
 
-  const first = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const first = listen(base, await sign());
   const result = await untilClose(first);
   broken.mock.restore();
 
@@ -382,7 +404,7 @@ test("closes with 1011 and keeps serving after an unexpected error", async (t) =
     logged.mock.calls[0].arguments[0],
     /^\[[0-9a-f-]+\] unexpected error: unexpected$/,
   );
-  const second = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const second = listen(base, await sign());
   assert.equal(JSON.parse((await nextMessage(second)).data).type, "ready");
 });
 
@@ -392,7 +414,7 @@ test("closes with 1011 when sending a transcript throws", async (t) => {
   t.after(shutdown);
   const logged = t.mock.method(console, "error", () => {});
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   const ready = nextMessage(ws);
   fake.open();
   await ready;
@@ -424,7 +446,7 @@ test("keeps serving when closing the provider stream throws", async (t) => {
   t.after(shutdown);
   const logged = t.mock.method(console, "error", () => {});
 
-  const first = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const first = listen(base, await sign());
   const ready = nextMessage(first);
   failing.open();
   await ready;
@@ -436,7 +458,7 @@ test("keeps serving when closing the provider stream throws", async (t) => {
     logged.mock.calls[0].arguments[0],
     /^\[[0-9a-f-]+\] unexpected error: close failed$/,
   );
-  const second = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const second = listen(base, await sign());
   const secondReady = nextMessage(second);
   fakes[0].open();
   assert.equal(JSON.parse((await secondReady).data).type, "ready");
@@ -451,10 +473,10 @@ test("a failing connection does not affect another one", async (t) => {
   });
   t.after(shutdown);
 
-  const first = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const first = listen(base, await sign());
   const firstResult = untilClose(first);
   await new Promise((resolve) => setTimeout(resolve, 50));
-  const second = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const second = listen(base, await sign());
   const secondReady = nextMessage(second);
   await new Promise((resolve) => setTimeout(resolve, 50));
   failing.failOpen(new Error("open failed"));
@@ -472,7 +494,7 @@ test("sends ready only after the provider stream is open", async (t) => {
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   let ready = false;
   ws.onmessage = () => (ready = true);
   await new Promise((resolve) => setTimeout(resolve, 50));
@@ -487,7 +509,7 @@ test("does not forward text frames to the provider", async (t) => {
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   const ready = nextMessage(ws);
   fake.open();
   await ready;
@@ -507,7 +529,7 @@ test("forwards audio to the provider and transcripts to the client", async (t) =
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   const ready = nextMessage(ws);
   fake.open();
   await ready;
@@ -530,7 +552,7 @@ test("closes the provider stream when the connection closes", async (t) => {
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   const ready = nextMessage(ws);
   fake.open();
   await ready;
@@ -546,7 +568,7 @@ test("closes the provider stream when the client leaves while it opens", async (
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   await new Promise((resolve) => setTimeout(resolve, 50));
   const closed = new Promise((resolve) => (ws.onclose = resolve));
   ws.close();
@@ -564,7 +586,7 @@ test("accepts a 64 KiB frame", async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   await nextMessage(ws);
   let closed = false;
   ws.onclose = () => (closed = true);
@@ -580,7 +602,7 @@ test("closes with 1009 when a frame is larger than 64 KiB", async (t) => {
   const { base, shutdown } = await start();
   t.after(shutdown);
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   await nextMessage(ws);
   const closed = new Promise<CloseEvent>((resolve) => {
     ws.onclose = resolve;
@@ -603,7 +625,7 @@ function rawUpgrade(base: string, target: string) {
 }
 
 async function expectReady(base: string) {
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   assert.equal(JSON.parse((await nextMessage(ws)).data).type, "ready");
   ws.close();
 }
@@ -673,7 +695,7 @@ test("keeps a connection that answers pings", async (t) => {
   const { base, shutdown } = await start({ openStream: fake.openStream });
   t.after(shutdown);
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   const ready = nextMessage(ws);
   fake.open();
   await ready;
@@ -698,7 +720,8 @@ test("terminates a connection that does not answer pings", async (t) => {
   const { port } = new URL(base);
   const socket = connect(Number(port), "localhost");
   socket.write(
-    `GET /dicta/v1/listen?token=${await sign()} HTTP/1.1\r\n` +
+    "GET /dicta/v1/listen HTTP/1.1\r\n" +
+      `Sec-WebSocket-Protocol: dicta, ${await sign()}\r\n` +
       "Host: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
       "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
       "Sec-WebSocket-Version: 13\r\n\r\n",
@@ -720,7 +743,7 @@ test("terminates a connection that does not answer pings", async (t) => {
 test("shutdown closes open connections with 1001", async () => {
   const { base, shutdown } = await start();
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   await nextMessage(ws);
   const closed = new Promise<CloseEvent>((resolve) => {
     ws.onclose = resolve;
@@ -734,7 +757,7 @@ test("shutdown stops accepting connections", async () => {
   const { base, shutdown } = await start();
   await shutdown();
 
-  const ws = new WebSocket(`${base}/dicta/v1/listen?token=${await sign()}`);
+  const ws = listen(base, await sign());
   await new Promise<void>((resolve, reject) => {
     ws.onerror = () => resolve();
     ws.onopen = () => reject(new Error("connection was accepted"));

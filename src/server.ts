@@ -7,6 +7,8 @@ import { quoteForLog } from "./logging.ts";
 import type { OpenStream, ProviderStream } from "./providers/provider.ts";
 
 const LISTEN_PATH = "/dicta/v1/listen";
+// The WebSocket protocol name; the JWT follows it in Sec-WebSocket-Protocol.
+const PROTOCOL = "dicta";
 const MAX_FRAME_BYTES = 64 * 1024;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PROVIDER_ERROR_MESSAGE = "speech-to-text provider failed";
@@ -34,6 +36,10 @@ export function createServer({
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: MAX_FRAME_BYTES,
+    // A browser fails the connection unless the server answers with a protocol
+    // it offered.
+    handleProtocols: (protocols) =>
+      protocols.has(PROTOCOL) ? PROTOCOL : false,
   });
 
   // A connection that did not answer the previous ping is terminated, which
@@ -89,13 +95,15 @@ export function createServer({
       };
       // ws ignores the callback's return value, so an error left in this
       // promise would crash the process.
-      handleConnection(ws, url, sessionId, unexpected).catch(unexpected);
+      const token = tokenFromProtocols(req.headers["sec-websocket-protocol"]);
+      handleConnection(ws, url, token, sessionId, unexpected).catch(unexpected);
     });
   });
 
   async function handleConnection(
     ws: WebSocket,
     url: URL,
+    token: string | null,
     sessionId: string,
     unexpected: (err: unknown) => void,
   ): Promise<void> {
@@ -114,7 +122,7 @@ export function createServer({
 
     let sub: string | undefined;
     if (secret) {
-      const check = await checkToken(url.searchParams.get("token"), secret);
+      const check = await checkToken(token, secret);
       if (!check.ok) {
         console.warn(`${tag} token rejected: ${check.reason}`);
         ws.close(4001);
@@ -211,6 +219,13 @@ export function createServer({
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+// The JWT is the entry after "dicta" in the Sec-WebSocket-Protocol header.
+function tokenFromProtocols(header: string | undefined): string | null {
+  const entries = header?.split(",").map((entry) => entry.trim()) ?? [];
+  const index = entries.indexOf(PROTOCOL);
+  return index === -1 ? null : (entries[index + 1] ?? null);
 }
 
 type TokenCheck = { ok: true; sub?: string } | { ok: false; reason: string };

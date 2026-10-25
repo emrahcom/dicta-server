@@ -1,6 +1,7 @@
 # dicta-server
 
-Server side of dicta, a voice-control layer for web applications.
+Server side of dicta. Users tell a web application what they want, by typing or
+by speaking. This server turns the speech into text.
 
 Early development. Not ready for use.
 

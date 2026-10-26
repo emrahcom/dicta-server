@@ -29,5 +29,8 @@ dicta-server is the server side. It receives a user's microphone audio from
   result when they stop.
 - Mistral and Deepgram as speech-to-text providers, chosen per server.
 
-Later, the server may turn final transcripts into the application's actions
-(tool calls) instead of returning text only.
+Turning the text into the application's actions (tool calls) is not part of
+dicta-server. `dicta-js` and dicta-server are complete without it: the
+application gets the text and handles it itself. Applications that want actions
+can add the optional `dicta-action-server`, which takes the text that `dicta-js`
+delivers.

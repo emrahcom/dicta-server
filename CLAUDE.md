@@ -1,9 +1,9 @@
 # dicta-server
 
-The server side of dicta, a voice-control layer for web applications. Browsers
-running `dicta-js` stream microphone audio over a WebSocket. The server checks
-the user's token, forwards the audio to a speech-to-text provider and sends the
-transcripts back.
+The server side of dicta, which lets users tell a web application what they
+want, by typing or by speaking. Browsers running `dicta-js` stream microphone
+audio over a WebSocket. The server checks the user's token, forwards the audio
+to a speech-to-text provider and sends the transcripts back.
 
 Node.js 24 or later and TypeScript (strict).
 

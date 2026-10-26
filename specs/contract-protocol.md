@@ -98,6 +98,11 @@ The server sends a WebSocket ping every 30 seconds. A client that does not
 answer with a pong before the next ping is disconnected. Browsers and common
 WebSocket libraries answer pings automatically.
 
+The server closes a connection with code `1000` when the client has sent no
+message for 10 minutes. Pongs do not count. The client opens a new connection
+when it needs one. A client that waits longer than that for speech, for example
+in a hands-free session, sends nothing meanwhile and gets this close.
+
 Code `1011` from the server means a server-side failure. It may come without an
 `error` message. The client may open a new connection, waiting longer after each
 failure in a row.
@@ -107,6 +112,9 @@ new token from the application's backend before it connects again.
 
 Code `1001` from the server means it is shutting down. The client may open a new
 connection.
+
+Code `1000` from the server means the connection was idle, as above. It is not a
+failure.
 
 Any other close, such as `1006` after a network loss or a missed pong, is
 handled like `1011`.

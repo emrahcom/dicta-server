@@ -24,6 +24,11 @@ Message formats are in `contract-protocol.md`.
 - No session resume. After a disconnect the client opens a new connection.
 - The ping in `contract-protocol.md` (Closing) finds a client that vanished
   without closing, so it does not keep a provider stream open.
+- The idle close in `contract-protocol.md` (Closing) does the same for a client
+  that stays connected but sends nothing, because a provider stream is kept
+  open, and may be billed, for as long as the connection is. The 10 minutes are
+  longer than a `dicta-js` hands-free session can wait for speech (5 minutes)
+  plus its own idle close (1 minute).
 
 ## Authentication
 

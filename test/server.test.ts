@@ -557,8 +557,9 @@ test("keeps finals in order when utterances end before earlier finals", async (t
 });
 
 test("finishes the utterance 5 seconds after the last audio", async (t) => {
-  const { fake, ws } = await openWithFake(t);
+  // Before the connection, so every timer of it is mocked.
   t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { fake, ws } = await openWithFake(t);
 
   ws.send(new Uint8Array([1]));
   await untilChunks(fake, 1);
@@ -767,6 +768,42 @@ test("terminates a connection that does not answer pings", async (t) => {
   await closed;
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(fake.closed, true);
+});
+
+test("closes a connection with 1000 after 10 minutes without messages", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { fake, ws } = await openWithFake(t);
+  const result = untilClose(ws);
+
+  t.mock.timers.tick(10 * 60_000 - 1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(ws.readyState, WebSocket.OPEN);
+  t.mock.timers.tick(1);
+
+  assert.equal((await result).code, 1000);
+  // The server closes the provider stream when its side of the close is done.
+  while (!fake.closed) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  t.mock.timers.reset();
+});
+
+test("keeps a connection whose client sends messages", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { fake, ws } = await openWithFake(t);
+
+  t.mock.timers.tick(9 * 60_000);
+  ws.send(JSON.stringify({ type: "end" }));
+  await nextMessage(ws);
+  t.mock.timers.tick(9 * 60_000);
+  ws.send(new Uint8Array([1]));
+  await untilChunks(fake, 1);
+  t.mock.timers.tick(9 * 60_000);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(ws.readyState, WebSocket.OPEN);
+  assert.equal(fake.closed, false);
+  t.mock.timers.reset();
 });
 
 test("shutdown closes open connections with 1001", async () => {

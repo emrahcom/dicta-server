@@ -16,6 +16,8 @@ const LISTEN_PATH = "/dicta/v1/listen";
 const PROTOCOL = "dicta";
 const MAX_FRAME_BYTES = 64 * 1024;
 const HEARTBEAT_INTERVAL_MS = 30_000;
+// A connection whose client sent nothing for this long is closed with 1000.
+const IDLE_CLOSE_MS = 10 * 60_000;
 // Without `end`, an utterance is finished this long after its last audio frame.
 const FINISH_AFTER_MS = 5000;
 const PROVIDER_ERROR_MESSAGE = "speech-to-text provider failed";
@@ -94,6 +96,20 @@ export function createServer({
       );
       answered.add(ws);
       ws.on("pong", () => answered.add(ws));
+      // An idle client would keep its provider stream open, and maybe billed.
+      // The close also closes the provider stream. Pongs do not count.
+      let idleTimer: NodeJS.Timeout | undefined;
+      const restartIdleTimer = () => {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (ws.readyState === ws.OPEN) {
+            ws.close(1000);
+          }
+        }, IDLE_CLOSE_MS);
+      };
+      restartIdleTimer();
+      ws.on("message", restartIdleTimer);
+      ws.on("close", () => clearTimeout(idleTimer));
       const unexpected = (err: unknown) => {
         console.error(`${tag} unexpected error: ${errorMessage(err)}`);
         if (ws.readyState === ws.OPEN) {

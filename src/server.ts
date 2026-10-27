@@ -176,9 +176,11 @@ export function createServer({
           ws.close(1008);
         }
       });
-      ws.on("close", () => {
+      ws.on("close", (code) => {
         clearTimeout(idleTimer);
         clearTimeout(ageTimer);
+        const audio = Math.round(audioBytes / AUDIO_BYTES_PER_SECOND);
+        console.log(`${tag} closed code=${code} audio=${audio}s`);
       });
       const unexpected = (err: unknown) => {
         console.error(`${tag} unexpected error: ${errorMessage(err)}`);

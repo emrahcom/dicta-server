@@ -123,6 +123,17 @@ const rejections: {
   { name: "malformed", token: async () => "not-a-jwt", reason: "invalid" },
 ];
 
+// Waits until console.log, mocked, logged `count` lines; the server logs a
+// close only when its side of the close is done.
+async function untilLogged(
+  logged: { mock: { callCount(): number } },
+  count: number,
+) {
+  while (logged.mock.callCount() < count) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 for (const { name, token, reason } of rejections) {
   test(`closes with 4001 and logs the reason when the token is ${name}`, async (t) => {
     const { base, shutdown } = await start();
@@ -139,6 +150,41 @@ for (const { name, token, reason } of rejections) {
     );
   });
 }
+
+test("logs the close of a rejected connection after the reason", async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+  const warned = t.mock.method(console, "warn", () => {});
+  const logged = t.mock.method(console, "log", () => {});
+
+  await untilClose(listen(base, null));
+  await untilLogged(logged, 1);
+
+  const tag = warned.mock.calls[0].arguments[0].split(" ")[0];
+  assert.equal(
+    logged.mock.calls[0].arguments[0],
+    `${tag} closed code=4001 audio=0s`,
+  );
+});
+
+test("logs the close code and the seconds of audio when a connection closes", async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+  const logged = t.mock.method(console, "log", () => {});
+
+  const ws = listen(base, await sign());
+  const { sessionId } = JSON.parse((await nextMessage(ws)).data);
+  // 2.6 seconds of audio, rounded to 3.
+  ws.send(new Uint8Array(64_000));
+  ws.send(new Uint8Array(19_200));
+  ws.close(1000);
+  await untilLogged(logged, 2);
+
+  assert.equal(
+    logged.mock.calls[1].arguments[0],
+    `[${sessionId}] closed code=1000 audio=3s`,
+  );
+});
 
 test("logs connected with the sub of the token", async (t) => {
   const { base, shutdown } = await start();

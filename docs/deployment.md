@@ -28,6 +28,28 @@ its `dist/` folder to `js/` in the server's folder. Then restart the server.
 The files work on pages of other domains too. Browsers check for a new version
 on each load, so an update reaches users at once.
 
+## Docker
+
+The `Dockerfile` builds an image with the server and dicta-js. Give the dicta-js
+version to put in it, a release tag:
+
+```sh
+docker build --build-arg DICTA_JS_VERSION=v0.1.0 -t dicta-server .
+```
+
+The build gets that dicta-js version from GitHub. The image shows it in the
+label `dicta-js.version`.
+
+Run it with your settings as environment variables:
+
+```sh
+docker run -p 8080:8080 -e PROVIDER=deepgram -e DEEPGRAM_API_KEY=... \
+  -e JWT_SECRET=... dicta-server
+```
+
+The settings:
+https://github.com/emrahcom/dicta-server/blob/main/docs/settings.md
+
 ## Health check
 
 For health checks, use `/dicta/health`. It answers `ok` while the server runs.

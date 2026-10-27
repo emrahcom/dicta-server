@@ -285,8 +285,10 @@ Environment variables:
   development only. Default `false`. The server logs a warning at startup when
   it is on.
 - `MAX_CONNECTION_MINUTES`: the longest time one connection may stay open, from
-  when it opens, a positive whole number (Connections). Default `30`. The server
-  does not start with another value.
+  when it opens, a whole number from `1` to `1440` (one day) (Connections).
+  Default `30`. The server does not start with another value. The maximum keeps
+  the timer within what Node can set (about 24 days); above that, Node fires it
+  at once and closes every connection right after it opens.
 - `PROVIDER`: the speech-to-text provider. Required; the server does not start
   without a known one. Values: `stub`, `mistral`, `deepgram`.
 - `MISTRAL_API_KEY`: required when `PROVIDER` is `mistral`.

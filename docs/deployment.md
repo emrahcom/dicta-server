@@ -56,6 +56,41 @@ docker build --build-arg DICTA_JS_VERSION=v0.1.0 -t dicta-server .
 For health checks, use `/dicta/health`. It answers `ok` while the server runs.
 It does not check the speech-to-text service.
 
+## Limits
+
+The server limits each connection:
+
+- A connection stays open at most 30 minutes (`MAX_CONNECTION_MINUTES`).
+- A client cannot send audio faster than real time.
+
+The server does not limit how many connections one client opens. Limit this in
+the reverse proxy, per IP address. An example for nginx:
+
+```nginx
+limit_conn_zone $binary_remote_addr zone=dicta_conn:10m;
+limit_req_zone $binary_remote_addr zone=dicta_req:10m rate=30r/m;
+
+server {
+  # ...
+
+  location /dicta/v1/listen {
+    limit_conn dicta_conn 10;
+    limit_req zone=dicta_req burst=10 nodelay;
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+  }
+}
+```
+
+This allows 10 open connections and 30 new connections per minute from one IP
+address. Many users in one office can share one IP address, so do not set the
+limits too low.
+
+Limits per user belong in your backend, which makes the tokens. See the token
+docs of dicta-js: https://github.com/emrahcom/dicta-js/blob/main/docs/tokens.md
+
 ## Scaling
 
 The servers share nothing. You can run as many as you need behind a load

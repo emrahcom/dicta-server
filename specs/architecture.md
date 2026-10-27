@@ -185,6 +185,12 @@ when it closes. Any instance can serve any user.
   and control characters as `\uXXXX`, so it cannot break or disguise a log line.
   It is cut to 128 characters, followed by `...` when longer:
   `connected sub="user-1"`.
+- Every connection is logged once when it closes, as
+  `closed code=<code> audio=<seconds>s`: the close code, from either side, and
+  the seconds of audio it received (its audio bytes, counted as for the
+  real-time limit, divided by 32000 and rounded). With the session id it joins
+  the `connected` line, so an operator can add up the audio of each `sub`, which
+  is what the provider bills, and find users who use too much.
 
 ## Health
 

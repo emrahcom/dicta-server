@@ -194,6 +194,24 @@ the same place it connects to:
   cookies or secrets.
 - Requests for them are not logged.
 
+## Docker image
+
+`Dockerfile` in the repo root builds an image that runs the server and serves
+`dicta-js`.
+
+- Build argument `DICTA_JS_VERSION`, a `dicta-js` release tag like `v0.1.0`.
+  Required; the build fails without it. The build gets the source of that tag
+  from GitHub, builds it and puts its `dist/` in `js/`. The caller picks the tag
+  (the release workflow uses the latest release), so the Dockerfile needs no
+  GitHub API call and a build can be repeated.
+- The image has the label `dicta-js.version` with that tag.
+- Two stages on `node:24-slim`: one builds `dicta-js`; the final one has the
+  server's `src/`, its production dependencies and `js/`. No tests, specs, docs
+  or dev dependencies.
+- It runs as the `node` user with `node src/index.ts` and exposes `8080`. All
+  settings come from environment variables (Configuration).
+- No `HEALTHCHECK`: the platform checks `/dicta/health`.
+
 ## Shutdown
 
 On `SIGTERM` or `SIGINT` the server stops accepting connections, closes the open

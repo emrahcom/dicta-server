@@ -29,6 +29,10 @@ Message formats are in `contract-protocol.md`.
   open, and may be billed, for as long as the connection is. The 10 minutes are
   longer than a `dicta-js` hands-free session can wait for speech (5 minutes)
   plus its own idle close (1 minute).
+- Once the server starts to close a connection, for any reason, it ignores what
+  the client still sends, so no more audio reaches the provider. The close
+  handshake can take up to 30 seconds when the client does not answer it, and
+  `ws` still delivers messages meanwhile.
 - Two limits in `contract-protocol.md` (Closing) cap what one connection can
   cost, since the provider bills by audio length and anyone with a valid token
   can connect:

@@ -5,7 +5,8 @@ by speaking. This server turns the speech into text.
 
 Browsers connect to it with dicta-js: https://github.com/emrahcom/dicta-js
 
-Early development. Not ready for use.
+Version 0.x. Settings may still change. The release notes tell you when you must
+change your setup.
 
 ## Quick start
 

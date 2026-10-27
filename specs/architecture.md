@@ -212,6 +212,24 @@ the same place it connects to:
   settings come from environment variables (Configuration).
 - No `HEALTHCHECK`: the platform checks `/dicta/health`.
 
+### Image workflow
+
+`.github/workflows/image.yml` builds the image and pushes it to the GitHub
+registry as `ghcr.io/emrahcom/dicta-server`.
+
+- It runs when a release is published, and by hand (`workflow_dispatch`), for
+  example after a new `dicta-js` release. It does not run on pushes.
+- It builds a `dicta-server` release tag, never a branch: on a release event
+  that release's tag, by hand the tag of the latest release.
+- `DICTA_JS_VERSION` is the tag of the latest `dicta-js` release, read with the
+  GitHub CLI on the runner.
+- Tags: the version without the `v`, like `0.1.0`, and `latest`. A run by hand
+  replaces both; the `dicta-js.version` label tells which `dicta-js` is in.
+- The label `org.opencontainers.image.source` links the image to the repo.
+- `linux/amd64` only.
+- It logs in with `GITHUB_TOKEN` and the `packages: write` permission, and uses
+  plain `docker` commands besides `actions/checkout`.
+
 ## Shutdown
 
 On `SIGTERM` or `SIGINT` the server stops accepting connections, closes the open

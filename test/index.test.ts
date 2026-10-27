@@ -12,6 +12,7 @@ function startIndex(env: Record<string, string>) {
     PROVIDER,
     MISTRAL_API_KEY,
     DEEPGRAM_API_KEY,
+    MAX_CONNECTION_MINUTES,
     ...rest
   } = process.env;
   return spawn("node", ["src/index.ts"], {
@@ -66,6 +67,34 @@ test("exits at startup with a JWT_SECRET shorter than 32 bytes", async () => {
     PROVIDER: "stub",
   });
   assert.match(stderr, /JWT_SECRET must be at least 32 bytes/);
+});
+
+for (const value of ["0", "1.5", "abc", "1441"]) {
+  test(`exits at startup with MAX_CONNECTION_MINUTES=${value}`, async () => {
+    const stderr = await exitWithError({
+      JWT_SECRET: SECRET,
+      PROVIDER: "stub",
+      MAX_CONNECTION_MINUTES: value,
+    });
+    assert.match(
+      stderr,
+      /MAX_CONNECTION_MINUTES must be a whole number from 1 to 1440/,
+    );
+  });
+}
+
+test("starts with MAX_CONNECTION_MINUTES=1440", async () => {
+  const child = startIndex({
+    JWT_SECRET: SECRET,
+    PROVIDER: "stub",
+    MAX_CONNECTION_MINUTES: "1440",
+  });
+
+  await once(child.stdout, "data");
+  child.kill("SIGTERM");
+  const [code] = await once(child, "exit");
+
+  assert.equal(code, 0);
 });
 
 test("exits at startup with PROVIDER=mistral and no MISTRAL_API_KEY", async () => {

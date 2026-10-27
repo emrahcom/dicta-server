@@ -6,6 +6,9 @@ import { createServer, type AuthOptions } from "./server.ts";
 const SHUTDOWN_TIMEOUT_MS = 5000;
 // RFC 7518: an HS256 key must be at least as long as the hash output.
 const MIN_SECRET_BYTES = 32;
+// One day; it keeps the age timer within what Node can set (architecture.md,
+// Configuration).
+const MAX_CONNECTION_MINUTES = 1440;
 
 const port = Number(process.env.PORT || 8080);
 
@@ -24,8 +27,14 @@ if (process.env.ALLOW_UNAUTHENTICATED === "true") {
 }
 
 const maxConnectionMinutes = Number(process.env.MAX_CONNECTION_MINUTES || 30);
-if (!Number.isInteger(maxConnectionMinutes) || maxConnectionMinutes < 1) {
-  console.error("MAX_CONNECTION_MINUTES must be a positive whole number");
+if (
+  !Number.isInteger(maxConnectionMinutes) ||
+  maxConnectionMinutes < 1 ||
+  maxConnectionMinutes > MAX_CONNECTION_MINUTES
+) {
+  console.error(
+    `MAX_CONNECTION_MINUTES must be a whole number from 1 to ${MAX_CONNECTION_MINUTES}`,
+  );
   process.exit(1);
 }
 

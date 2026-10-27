@@ -30,25 +30,26 @@ on each load, so an update reaches users at once.
 
 ## Docker
 
-The `Dockerfile` builds an image with the server and dicta-js. Give the dicta-js
-version to put in it, a release tag:
-
-```sh
-docker build --build-arg DICTA_JS_VERSION=v0.1.0 -t dicta-server .
-```
-
-The build gets that dicta-js version from GitHub. The image shows it in the
-label `dicta-js.version`.
-
-Run it with your settings as environment variables:
+The image is in the GitHub registry. Run it with your settings as environment
+variables:
 
 ```sh
 docker run -p 8080:8080 -e PROVIDER=deepgram -e DEEPGRAM_API_KEY=... \
-  -e JWT_SECRET=... dicta-server
+  -e JWT_SECRET=... ghcr.io/emrahcom/dicta-server:latest
 ```
 
 The settings:
 https://github.com/emrahcom/dicta-server/blob/main/docs/settings.md
+
+The image has the server and dicta-js. The label `dicta-js.version` shows which
+dicta-js version is in it.
+
+To build the image yourself, give the dicta-js version to put in it, a release
+tag. The build gets it from GitHub:
+
+```sh
+docker build --build-arg DICTA_JS_VERSION=v0.1.0 -t dicta-server .
+```
 
 ## Health check
 

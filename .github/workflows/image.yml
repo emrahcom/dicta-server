@@ -1,0 +1,50 @@
+# Builds the Docker image and pushes it to the GitHub registry; see
+# specs/architecture.md (Image workflow).
+
+name: image
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      IMAGE: ghcr.io/emrahcom/dicta-server
+    steps:
+      - name: Find the versions
+        id: versions
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # By hand, there is no release event: take the latest release.
+          tag="${RELEASE_TAG:-$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)}"
+          js="$(gh release view --repo emrahcom/dicta-js --json tagName --jq .tagName)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "js=$js" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.versions.outputs.tag }}
+
+      - name: Build
+        env:
+          TAG: ${{ steps.versions.outputs.tag }}
+          JS: ${{ steps.versions.outputs.js }}
+        run: |
+          docker build \
+            --build-arg DICTA_JS_VERSION="$JS" \
+            --label org.opencontainers.image.source="https://github.com/$GITHUB_REPOSITORY" \
+            -t "$IMAGE:${TAG#v}" -t "$IMAGE:latest" .
+
+      - name: Push
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push --all-tags "$IMAGE"

@@ -51,8 +51,14 @@ breaks the protocol needs a new protocol version, not only a new version number.
 
 ## Docker image
 
-Publishing a release builds the Docker image and pushes it to the GitHub
-registry. The image contains the latest dicta-js release.
+Publishing a release starts the workflow "image". It builds the Docker image and
+pushes it to the GitHub registry as `ghcr.io/emrahcom/dicta-server`, with two
+tags: the version, like `0.2.0`, and `latest`. The image contains the latest
+dicta-js release.
 
-After a new dicta-js release, start the image build by hand, so the image gets
-the new dicta-js without a new dicta-server release.
+After a new dicta-js release, start the workflow by hand: on GitHub, open
+Actions, then "image", then "Run workflow". It builds the latest dicta-server
+release again with the new dicta-js and replaces both tags.
+
+After the first push, the image is private. Make it public once: on GitHub, open
+the package `dicta-server`, then "Package settings", then "Change visibility".

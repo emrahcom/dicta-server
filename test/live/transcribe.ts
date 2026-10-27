@@ -34,6 +34,7 @@ export async function transcribeUtterances(
   const { server, shutdown } = createServer({
     auth: { allowUnauthenticated: true },
     openStream,
+    maxConnectionMs: 30 * 60_000,
   });
   await new Promise<void>((resolve) => server.listen(0, resolve));
   t.after(shutdown);

@@ -15,6 +15,11 @@ Set them as environment variables.
   models. The default is `false`.
 - `JWT_SECRET`: the secret for the tokens, at least 32 bytes. Your backend signs
   the tokens with it. Required.
+- `MAX_CONNECTION_MINUTES`: the longest time one connection may stay open, in
+  minutes. The default is `30`. It limits what one token can cost. If a user
+  still speaks when the time is up, the words they are saying are lost and
+  dicta-js shows that voice failed. The next press opens a new connection. Raise
+  it if your users dictate for a long time without a break.
 - `ALLOW_UNAUTHENTICATED`: `true` turns tokens off. Use it only for development.
   Then `JWT_SECRET` is not needed.
 

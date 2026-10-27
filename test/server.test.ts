@@ -24,12 +24,14 @@ async function start(
     auth?: AuthOptions;
     openStream?: OpenStream;
     jsFolder?: string;
+    maxConnectionMs?: number;
   } = {},
 ): Promise<{ base: string; shutdown: () => Promise<void> }> {
   const { server, shutdown } = createServer({
     auth: options.auth ?? { jwtSecret: SECRET },
     openStream: options.openStream ?? openStubStream,
     jsFolder: options.jsFolder,
+    maxConnectionMs: options.maxConnectionMs ?? 30 * 60_000,
   });
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const { port } = server.address() as AddressInfo;
@@ -813,6 +815,56 @@ test("keeps a connection whose client sends messages", async (t) => {
   assert.equal(ws.readyState, WebSocket.OPEN);
   assert.equal(fake.closed, false);
   t.mock.timers.reset();
+});
+
+test("closes a connection with 1000 after the age limit", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fake = fakeProvider();
+  // Shorter than the idle close, so only the age limit can close it.
+  const { base, shutdown } = await start({
+    openStream: fake.openStream,
+    maxConnectionMs: 5 * 60_000,
+  });
+  t.after(shutdown);
+  const ws = listen(base, await sign());
+  const ready = nextMessage(ws);
+  fake.open();
+  await ready;
+  const result = untilClose(ws);
+
+  t.mock.timers.tick(5 * 60_000 - 1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(ws.readyState, WebSocket.OPEN);
+  t.mock.timers.tick(1);
+
+  assert.equal((await result).code, 1000);
+  t.mock.timers.reset();
+});
+
+test("keeps a connection whose audio is within real time plus 30 seconds", async (t) => {
+  const { fake, ws } = await openWithFake(t);
+  let closed = false;
+  ws.onclose = () => (closed = true);
+
+  // 30 seconds of audio at once, in frames of at most 64 KiB.
+  for (let left = 30 * 32_000; left > 0; left -= 64_000) {
+    ws.send(new Uint8Array(Math.min(left, 64_000)));
+  }
+  await untilChunks(fake, 15);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.equal(closed, false);
+});
+
+test("closes with 1008 when audio runs further ahead of real time", async (t) => {
+  const { ws } = await openWithFake(t);
+  const result = untilClose(ws);
+
+  for (let i = 0; i < 16; i++) {
+    ws.send(new Uint8Array(64_000));
+  }
+
+  assert.equal((await result).code, 1008);
 });
 
 test("shutdown closes open connections with 1001", async () => {

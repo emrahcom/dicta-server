@@ -23,6 +23,11 @@ const MAX_FRAME_BYTES = 64 * 1024;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 // A connection whose client sent nothing for this long is closed with 1000.
 const IDLE_CLOSE_MS = 10 * 60_000;
+// Audio bytes per second: 16 kHz, 16-bit, mono.
+const AUDIO_BYTES_PER_SECOND = 32_000;
+// How far audio may run ahead of real time: audio the client captured before
+// the connection was ready.
+const AUDIO_AHEAD_SECONDS = 30;
 // Without `end`, an utterance is finished this long after its last audio frame.
 const FINISH_AFTER_MS = 5000;
 const PROVIDER_ERROR_MESSAGE = "speech-to-text provider failed";
@@ -36,9 +41,13 @@ export function createServer({
   auth,
   openStream,
   jsFolder,
+  maxConnectionMs,
 }: {
   auth: AuthOptions;
   openStream: OpenStream;
+  // The longest time a connection may stay open; see architecture.md
+  // (Connections).
+  maxConnectionMs: number;
   // The folder with the built dicta-js; nothing is served without it.
   jsFolder?: string;
 }): {
@@ -146,7 +155,31 @@ export function createServer({
       };
       restartIdleTimer();
       ws.on("message", restartIdleTimer);
-      ws.on("close", () => clearTimeout(idleTimer));
+      // The age limit and the real-time limit; see architecture.md
+      // (Connections).
+      const ageTimer = setTimeout(() => {
+        if (ws.readyState === ws.OPEN) {
+          ws.close(1000);
+        }
+      }, maxConnectionMs);
+      const openedAt = performance.now();
+      let audioBytes = 0;
+      ws.on("message", (data, isBinary) => {
+        if (!isBinary) {
+          return;
+        }
+        audioBytes += (data as Buffer).length;
+        const seconds = (performance.now() - openedAt) / 1000;
+        const allowed =
+          (seconds + AUDIO_AHEAD_SECONDS) * AUDIO_BYTES_PER_SECOND;
+        if (audioBytes > allowed && ws.readyState === ws.OPEN) {
+          ws.close(1008);
+        }
+      });
+      ws.on("close", () => {
+        clearTimeout(idleTimer);
+        clearTimeout(ageTimer);
+      });
       const unexpected = (err: unknown) => {
         console.error(`${tag} unexpected error: ${errorMessage(err)}`);
         if (ws.readyState === ws.OPEN) {

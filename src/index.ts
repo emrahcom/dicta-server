@@ -23,6 +23,12 @@ if (process.env.ALLOW_UNAUTHENTICATED === "true") {
   auth = { jwtSecret: process.env.JWT_SECRET };
 }
 
+const maxConnectionMinutes = Number(process.env.MAX_CONNECTION_MINUTES || 30);
+if (!Number.isInteger(maxConnectionMinutes) || maxConnectionMinutes < 1) {
+  console.error("MAX_CONNECTION_MINUTES must be a positive whole number");
+  process.exit(1);
+}
+
 const createProvider = getProvider(process.env.PROVIDER);
 if (!createProvider) {
   console.error(`PROVIDER must be one of: ${providerNames.join(", ")}`);
@@ -39,7 +45,12 @@ try {
 // The built dicta-js, if the folder is there; see architecture.md.
 const jsFolder = fileURLToPath(new URL("../js/", import.meta.url));
 
-const { server, shutdown } = createServer({ auth, openStream, jsFolder });
+const { server, shutdown } = createServer({
+  auth,
+  openStream,
+  jsFolder,
+  maxConnectionMs: maxConnectionMinutes * 60_000,
+});
 
 server.listen(port, () => {
   console.log(`dicta-server listening on port ${port}`);

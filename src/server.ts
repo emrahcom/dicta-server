@@ -3,6 +3,7 @@ import { createServer as createHttpServer, type Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { errors, jwtVerify } from "jose";
 import { WebSocketServer, type WebSocket } from "ws";
+import { loadJsFiles } from "./js-files.ts";
 import { quoteForLog } from "./logging.ts";
 import { parseMessage } from "./providers/messages.ts";
 import type {
@@ -14,6 +15,8 @@ import type {
 const LISTEN_PATH = "/dicta/v1/listen";
 // Health checks for Docker, Kubernetes and load balancers; see architecture.md.
 const HEALTH_PATH = "/dicta/health";
+// The built dicta-js; see architecture.md (dicta-js files).
+const JS_PREFIX = "/dicta/js/";
 // The WebSocket protocol name; the JWT follows it in Sec-WebSocket-Protocol.
 const PROTOCOL = "dicta";
 const MAX_FRAME_BYTES = 64 * 1024;
@@ -32,24 +35,46 @@ export type AuthOptions =
 export function createServer({
   auth,
   openStream,
+  jsFolder,
 }: {
   auth: AuthOptions;
   openStream: OpenStream;
+  // The folder with the built dicta-js; nothing is served without it.
+  jsFolder?: string;
 }): {
   server: Server;
   shutdown: () => Promise<void>;
 } {
   const secret =
     "jwtSecret" in auth ? new TextEncoder().encode(auth.jwtSecret) : null;
+  const jsFiles = jsFolder ? loadJsFiles(jsFolder) : new Map();
   const server = createHttpServer((req, res) => {
     // Not new URL(): it throws on some malformed paths, which would crash the
     // process here.
-    const path = (req.url ?? "").split("?")[0];
-    if (
-      path === HEALTH_PATH &&
-      (req.method === "GET" || req.method === "HEAD")
-    ) {
+    const path = (req.url ?? "").split("?")[0]!;
+    const read = req.method === "GET" || req.method === "HEAD";
+    const jsFile = path.startsWith(JS_PREFIX)
+      ? jsFiles.get(path.slice(JS_PREFIX.length))
+      : undefined;
+    if (read && path === HEALTH_PATH) {
       res.writeHead(200, { "content-type": "text/plain" }).end("ok");
+    } else if (read && jsFile) {
+      const headers = {
+        "cache-control": "no-cache",
+        etag: jsFile.etag,
+        "access-control-allow-origin": "*",
+      };
+      // A proxy may have made the tag weak (W/) or listed several.
+      const current = req.headers["if-none-match"]
+        ?.split(",")
+        .some((tag) => tag.trim().replace(/^W\//, "") === jsFile.etag);
+      if (current) {
+        res.writeHead(304, headers).end();
+      } else {
+        res
+          .writeHead(200, { ...headers, "content-type": "text/javascript" })
+          .end(jsFile.body);
+      }
     } else {
       res.writeHead(404).end();
     }

@@ -11,6 +11,23 @@ upgrades to the server.
 All paths of the server start with `/dicta/`. One proxy rule for `/dicta/` is
 enough, and the server can share a domain with other services.
 
+## dicta-js
+
+The server can also serve dicta-js, so pages load it from the same address:
+
+```html
+<script
+  type="module"
+  src="https://dicta.example.com/dicta/js/index.js"
+></script>
+```
+
+The Docker image has it. To serve it without the image, build dicta-js and copy
+its `dist/` folder to `js/` in the server's folder. Then restart the server.
+
+The files work on pages of other domains too. Browsers check for a new version
+on each load, so an update reaches users at once.
+
 ## Health check
 
 For health checks, use `/dicta/health`. It answers `ok` while the server runs.

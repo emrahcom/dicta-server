@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { getProvider, providerNames } from "./providers/index.ts";
 import type { OpenStream } from "./providers/provider.ts";
 import { createServer, type AuthOptions } from "./server.ts";
@@ -35,7 +36,10 @@ try {
   process.exit(1);
 }
 
-const { server, shutdown } = createServer({ auth, openStream });
+// The built dicta-js, if the folder is there; see architecture.md.
+const jsFolder = fileURLToPath(new URL("../js/", import.meta.url));
+
+const { server, shutdown } = createServer({ auth, openStream, jsFolder });
 
 server.listen(port, () => {
   console.log(`dicta-server listening on port ${port}`);

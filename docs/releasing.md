@@ -56,9 +56,11 @@ pushes it to the GitHub registry as `ghcr.io/emrahcom/dicta-server`, with two
 tags: the version, like `0.2.0`, and `latest`. The image contains the latest
 dicta-js release.
 
-After a new dicta-js release, start the workflow by hand: on GitHub, open
-Actions, then "image", then "Run workflow". It builds the latest dicta-server
-release again with the new dicta-js and replaces both tags.
+So release dicta-js first when both change. A new dicta-js release reaches the
+image only with the next dicta-server release. If dicta-server has no other
+change, make a patch release, and write the new dicta-js version in the notes.
+
+The workflow fails while dicta-js has no release at all.
 
 After the first push, the image is private. Make it public once: on GitHub, open
 the package `dicta-server`, then "Package settings", then "Change visibility".

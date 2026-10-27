@@ -6,7 +6,6 @@ name: image
 on:
   release:
     types: [published]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,25 +18,19 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       IMAGE: ghcr.io/emrahcom/dicta-server
     steps:
-      - name: Find the versions
-        id: versions
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+      - name: Find the dicta-js version
+        id: dicta-js
         run: |
-          # By hand, there is no release event: take the latest release.
-          tag="${RELEASE_TAG:-$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)}"
-          js="$(gh release view --repo emrahcom/dicta-js --json tagName --jq .tagName)"
+          tag="$(gh release view --repo emrahcom/dicta-js --json tagName --jq .tagName)"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "js=$js" >> "$GITHUB_OUTPUT"
 
+      # On a release event, it checks out the release's tag.
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ steps.versions.outputs.tag }}
 
       - name: Build
         env:
-          TAG: ${{ steps.versions.outputs.tag }}
-          JS: ${{ steps.versions.outputs.js }}
+          TAG: ${{ github.event.release.tag_name }}
+          JS: ${{ steps.dicta-js.outputs.tag }}
         run: |
           docker build \
             --build-arg DICTA_JS_VERSION="$JS" \

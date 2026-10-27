@@ -37,6 +37,11 @@ Optional, against the real provider APIs: `npm run test:live` with
 `MISTRAL_API_KEY` and `DEEPGRAM_API_KEY` set. A provider without its key is
 skipped. Run it before a release or when a provider may have changed.
 
+## Releases
+
+Version rules and release steps are in `docs/releasing.md`. Releases are done by
+the user.
+
 ## Commits
 
 Type prefix (`feat`, `fix`, `refactor`, `test`, `docs`, `chore`), subject only,

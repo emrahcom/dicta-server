@@ -12,6 +12,8 @@ import type {
 } from "./providers/provider.ts";
 
 const LISTEN_PATH = "/dicta/v1/listen";
+// Health checks for Docker, Kubernetes and load balancers; see architecture.md.
+const HEALTH_PATH = "/dicta/health";
 // The WebSocket protocol name; the JWT follows it in Sec-WebSocket-Protocol.
 const PROTOCOL = "dicta";
 const MAX_FRAME_BYTES = 64 * 1024;
@@ -39,8 +41,18 @@ export function createServer({
 } {
   const secret =
     "jwtSecret" in auth ? new TextEncoder().encode(auth.jwtSecret) : null;
-  const server = createHttpServer((_req, res) => {
-    res.writeHead(404).end();
+  const server = createHttpServer((req, res) => {
+    // Not new URL(): it throws on some malformed paths, which would crash the
+    // process here.
+    const path = (req.url ?? "").split("?")[0];
+    if (
+      path === HEALTH_PATH &&
+      (req.method === "GET" || req.method === "HEAD")
+    ) {
+      res.writeHead(200, { "content-type": "text/plain" }).end("ok");
+    } else {
+      res.writeHead(404).end();
+    }
   });
   const wss = new WebSocketServer({
     noServer: true,

@@ -52,6 +52,9 @@ upgrades to the server.
 All paths of the server start with `/dicta/`. One proxy rule for `/dicta/` is
 enough, and the server can share a domain with other services.
 
+For health checks, use `/dicta/health`. It answers `ok` while the server runs.
+It does not check the speech-to-text service.
+
 ## More
 
 The protocol is in `specs/contract-protocol.md`, and the design in

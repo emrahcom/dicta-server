@@ -829,3 +829,26 @@ test("shutdown stops accepting connections", async () => {
     ws.onopen = () => reject(new Error("connection was accepted"));
   });
 });
+
+test("answers health checks with 200 and nothing else", async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+  const logged = t.mock.method(console, "log", () => {});
+  const http = base.replace("ws://", "http://");
+
+  const get = await fetch(`${http}/dicta/health?probe=1`);
+  const head = await fetch(`${http}/dicta/health`, { method: "HEAD" });
+  const post = await fetch(`${http}/dicta/health`, { method: "POST" });
+  const other = await fetch(`${http}/dicta/other`);
+  const malformed = await fetch(`${http}//x:99999`);
+
+  assert.equal(get.status, 200);
+  assert.equal(get.headers.get("content-type"), "text/plain");
+  assert.equal(await get.text(), "ok");
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), "");
+  assert.equal(post.status, 404);
+  assert.equal(other.status, 404);
+  assert.equal(malformed.status, 404);
+  assert.equal(logged.mock.callCount(), 0);
+});

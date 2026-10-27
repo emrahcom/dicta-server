@@ -164,8 +164,35 @@ when it closes. Any instance can serve any user.
 `GET /dicta/health` (and `HEAD`) answers `200` with the body `ok`, for Docker,
 Kubernetes and load balancers. It only tells that the process runs and accepts
 connections: it does not check the provider, since a provider check on every
-probe would cost requests. Every other HTTP request still gets `404`. It needs
-no token and logs nothing.
+probe would cost requests. Other HTTP requests get `404`, except the dicta-js
+files below. It needs no token and logs nothing.
+
+## dicta-js files
+
+The server can serve the files of `dicta-js`, so a page loads the element from
+the same place it connects to:
+
+```html
+<script type="module" src="https://<host>/dicta/js/index.js"></script>
+```
+
+- The files come from the folder `js/` in the server's root, which holds the
+  built `dicta-js`, its `dist/` folder. Without that folder, nothing is served
+  under `/dicta/js/`. The Docker image puts it there; git ignores it.
+- The `.js` files in that folder and its subfolders are read once at startup and
+  served from memory under `/dicta/js/`, for example `/dicta/js/index.js` and
+  `/dicta/js/audio/worklet.js`, with `content-type: text/javascript`. Other
+  files, other paths and other methods than `GET` and `HEAD` get `404`. The path
+  never reaches the file system, so a path like `/dicta/js/../x` cannot read
+  other files.
+- The path has no version: the files come with the server, so a page always gets
+  the `dicta-js` that fits it. The answers have `cache-control: no-cache` and an
+  `ETag` from the file's content: browsers keep a copy but check it on each
+  load, and get `304` while it is current, so an update is never missed.
+- `access-control-allow-origin: *`, since pages on other origins load them as
+  modules and as an AudioWorklet, which need CORS. They are public code without
+  cookies or secrets.
+- Requests for them are not logged.
 
 ## Shutdown
 

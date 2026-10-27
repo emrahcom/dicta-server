@@ -39,16 +39,20 @@ Message formats are in `contract-protocol.md`.
     checked when the connection opens, so without this limit one token could
     stream for days. With it, a copied token can only be used until its `exp`,
     plus at most this time on each connection opened before then.
-  - Why 10 minutes is a safe default: `dicta-js` closes its connection after 1
-    minute without voice use, so a connection reaches 10 minutes only when the
-    user starts voice input again and again without a 1 minute break. One
-    utterance is much shorter, usually under 1 or 2 minutes. When the limit
-    falls during an utterance, that utterance is lost (`dicta-js` shows "Voice
-    failed") and the next press opens a new connection. This is rare and costs
-    the user one message.
+  - Why 30 minutes is the default: `dicta-js` closes its connection after 1
+    minute without voice use, so a connection reaches 30 minutes only when the
+    user starts voice input again and again without a 1 minute break, or in a
+    `toggle` session that long: such a session keeps listening, on one
+    connection, until the user ends it or 5 minutes pass without speech. When
+    the limit falls while `dicta-js` listens, listening stops as after any
+    failure: the button shows it no longer listens, the words of the utterance
+    in progress are lost, finals already received stay, and "Voice failed" is
+    shown. The next press opens a new connection. Between utterances nothing is
+    shown. A shorter time would cut long dictation sessions more often; a longer
+    one lets a copied token cost more.
   - The real-time limit. Audio is 32000 bytes per second (16 kHz, 16-bit, mono).
     The server counts the audio bytes of the connection and closes it when they
-    are more than 10 seconds of audio ahead of the time since it opened. The 10
+    are more than 30 seconds of audio ahead of the time since it opened. The 30
     seconds cover audio the client captured before the connection was ready. A
     burst after a network stall stays within the limit, since the audio was
     captured in real time.
@@ -271,7 +275,7 @@ Environment variables:
   development only. Default `false`. The server logs a warning at startup when
   it is on.
 - `MAX_CONNECTION_MINUTES`: the longest time one connection may stay open, from
-  when it opens, a positive whole number (Connections). Default `10`. The server
+  when it opens, a positive whole number (Connections). Default `30`. The server
   does not start with another value.
 - `PROVIDER`: the speech-to-text provider. Required; the server does not start
   without a known one. Values: `stub`, `mistral`, `deepgram`.

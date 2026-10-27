@@ -105,11 +105,11 @@ for speech, for example in a hands-free session, sends nothing meanwhile and
 gets this close.
 
 The server also closes a connection with code `1000` when it has been open for a
-configured time, 10 minutes by default, also during an utterance. The client
+configured time, 30 minutes by default, also during an utterance. The client
 opens a new connection when it needs one.
 
 The server closes a connection with code `1008` when the client sends audio
-faster than real time: when the audio received is more than 10 seconds longer
+faster than real time: when the audio received is more than 30 seconds longer
 than the time since the connection opened. A client that captures speech from
 the microphone never gets this close.
 

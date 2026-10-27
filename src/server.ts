@@ -154,7 +154,13 @@ export function createServer({
         }, IDLE_CLOSE_MS);
       };
       restartIdleTimer();
-      ws.on("message", restartIdleTimer);
+      // Once a close starts, ws still delivers messages until the client
+      // answers it; they are ignored (architecture.md, Connections).
+      ws.on("message", () => {
+        if (ws.readyState === ws.OPEN) {
+          restartIdleTimer();
+        }
+      });
       // The age limit and the real-time limit; see architecture.md
       // (Connections).
       const ageTimer = setTimeout(() => {
@@ -165,7 +171,7 @@ export function createServer({
       const openedAt = performance.now();
       let audioBytes = 0;
       ws.on("message", (data, isBinary) => {
-        if (!isBinary) {
+        if (!isBinary || ws.readyState !== ws.OPEN) {
           return;
         }
         audioBytes += (data as Buffer).length;
@@ -324,6 +330,9 @@ export function createServer({
     ws.on(
       "message",
       guard((data, isBinary) => {
+        if (ws.readyState !== ws.OPEN) {
+          return;
+        }
         try {
           if (isBinary) {
             // Not audio, and Deepgram would take an empty frame as a close.

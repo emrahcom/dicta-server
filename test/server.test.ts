@@ -913,6 +913,20 @@ test("closes with 1008 when audio runs further ahead of real time", async (t) =>
   assert.equal((await result).code, 1008);
 });
 
+test("sends no more audio to the provider once the close starts", async (t) => {
+  const { fake, ws } = await openWithFake(t);
+  const result = untilClose(ws);
+
+  // 80 seconds at once: the 16th frame starts the 1008 close, and the frames
+  // after it arrive before the client answers the close.
+  for (let i = 0; i < 40; i++) {
+    ws.send(new Uint8Array(64_000));
+  }
+
+  assert.equal((await result).code, 1008);
+  assert.equal(fake.chunks.length, 15);
+});
+
 test("shutdown closes open connections with 1001", async () => {
   const { base, shutdown } = await start();
 

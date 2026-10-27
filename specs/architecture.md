@@ -159,6 +159,14 @@ when it closes. Any instance can serve any user.
   It is cut to 128 characters, followed by `...` when longer:
   `connected sub="user-1"`.
 
+## Health
+
+`GET /dicta/health` (and `HEAD`) answers `200` with the body `ok`, for Docker,
+Kubernetes and load balancers. It only tells that the process runs and accepts
+connections: it does not check the provider, since a provider check on every
+probe would cost requests. Every other HTTP request still gets `404`. It needs
+no token and logs nothing.
+
 ## Shutdown
 
 On `SIGTERM` or `SIGINT` the server stops accepting connections, closes the open

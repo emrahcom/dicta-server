@@ -104,6 +104,15 @@ opens a new connection when it needs one. A client that waits longer than that
 for speech, for example in a hands-free session, sends nothing meanwhile and
 gets this close.
 
+The server also closes a connection with code `1000` when it has been open for a
+configured time, 10 minutes by default, also during an utterance. The client
+opens a new connection when it needs one.
+
+The server closes a connection with code `1008` when the client sends audio
+faster than real time: when the audio received is more than 10 seconds longer
+than the time since the connection opened. A client that captures speech from
+the microphone never gets this close.
+
 Code `1011` from the server means a server-side failure. It may come without an
 `error` message. The client may open a new connection, waiting longer after each
 failure in a row.

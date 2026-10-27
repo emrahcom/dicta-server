@@ -29,6 +29,29 @@ Message formats are in `contract-protocol.md`.
   open, and may be billed, for as long as the connection is. The 10 minutes are
   longer than a `dicta-js` hands-free session can wait for speech (5 minutes)
   plus its own idle close (1 minute).
+- Two limits in `contract-protocol.md` (Closing) cap what one connection can
+  cost, since the provider bills by audio length and anyone with a valid token
+  can connect:
+  - The connection age limit (`MAX_CONNECTION_MINUTES`): the longest time one
+    WebSocket connection may stay open, counted from when it opens, whatever the
+    client does meanwhile. It is not a limit per utterance or per user: the
+    client opens a new connection and gets a new full time. `exp` is only
+    checked when the connection opens, so without this limit one token could
+    stream for days. With it, a copied token can only be used until its `exp`,
+    plus at most this time on each connection opened before then.
+  - Why 10 minutes is a safe default: `dicta-js` closes its connection after 1
+    minute without voice use, so a connection reaches 10 minutes only when the
+    user starts voice input again and again without a 1 minute break. One
+    utterance is much shorter, usually under 1 or 2 minutes. When the limit
+    falls during an utterance, that utterance is lost (`dicta-js` shows "Voice
+    failed") and the next press opens a new connection. This is rare and costs
+    the user one message.
+  - The real-time limit. Audio is 32000 bytes per second (16 kHz, 16-bit, mono).
+    The server counts the audio bytes of the connection and closes it when they
+    are more than 10 seconds of audio ahead of the time since it opened. The 10
+    seconds cover audio the client captured before the connection was ready. A
+    burst after a network stall stays within the limit, since the audio was
+    captured in real time.
 
 ## Authentication
 
@@ -247,6 +270,9 @@ Environment variables:
 - `ALLOW_UNAUTHENTICATED`: when `true`, tokens are not checked at all. For
   development only. Default `false`. The server logs a warning at startup when
   it is on.
+- `MAX_CONNECTION_MINUTES`: the longest time one connection may stay open, from
+  when it opens, a positive whole number (Connections). Default `10`. The server
+  does not start with another value.
 - `PROVIDER`: the speech-to-text provider. Required; the server does not start
   without a known one. Values: `stub`, `mistral`, `deepgram`.
 - `MISTRAL_API_KEY`: required when `PROVIDER` is `mistral`.

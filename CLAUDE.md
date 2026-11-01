@@ -7,6 +7,8 @@ to a speech-to-text provider and sends the transcripts back.
 
 Node.js 24 or later and TypeScript (strict).
 
+Accessibility, high test coverage, security and stability are first-class goals.
+
 ## Specs and tasks
 
 - `specs/` is authoritative; code follows it. Specs are living documents: write

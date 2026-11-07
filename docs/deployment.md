@@ -60,7 +60,8 @@ It does not check the speech-to-text service.
 
 The server limits each connection:
 
-- A connection stays open at most 30 minutes (`MAX_CONNECTION_MINUTES`).
+- A connection stays open at most 30 minutes by default
+  (`MAX_CONNECTION_MINUTES`).
 - A client cannot send audio faster than real time.
 
 The server does not limit how many connections one client opens. Limit this in

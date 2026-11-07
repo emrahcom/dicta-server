@@ -22,8 +22,9 @@ instead of real speech-to-text.
 
 ## Documents
 
-- Settings: https://github.com/emrahcom/dicta-server/blob/main/docs/settings.md
-- Deployment:
+- Settings:\
+  https://github.com/emrahcom/dicta-server/blob/main/docs/settings.md
+- Deployment:\
   https://github.com/emrahcom/dicta-server/blob/main/docs/deployment.md
 
 The protocol and the design are in `specs/`, for developers of dicta.

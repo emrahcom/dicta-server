@@ -23,7 +23,10 @@ if (process.env.ALLOW_UNAUTHENTICATED === "true") {
   console.error(`JWT_SECRET must be at least ${MIN_SECRET_BYTES} bytes`);
   process.exit(1);
 } else {
-  auth = { jwtSecret: process.env.JWT_SECRET };
+  auth = {
+    jwtSecret: process.env.JWT_SECRET,
+    jwtAudience: process.env.JWT_AUDIENCE || undefined,
+  };
 }
 
 const maxConnectionMinutes = Number(process.env.MAX_CONNECTION_MINUTES || 30);

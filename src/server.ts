@@ -34,8 +34,10 @@ const PROVIDER_ERROR_MESSAGE = "speech-to-text provider failed";
 // A BCP 47 tag: a language code of 2 or 3 letters, then optional subtags.
 const LANG_TAG = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/;
 
+// jwtAudience: the aud a token must have; without it, aud is not checked
+// (architecture.md, Authentication).
 export type AuthOptions =
-  { jwtSecret: string } | { allowUnauthenticated: true };
+  { jwtSecret: string; jwtAudience?: string } | { allowUnauthenticated: true };
 
 export function createServer({
   auth,
@@ -56,6 +58,7 @@ export function createServer({
 } {
   const secret =
     "jwtSecret" in auth ? new TextEncoder().encode(auth.jwtSecret) : null;
+  const audience = "jwtSecret" in auth ? auth.jwtAudience : undefined;
   const jsFiles = jsFolder ? loadJsFiles(jsFolder) : new Map();
   const server = createHttpServer((req, res) => {
     // Not new URL(): it throws on some malformed paths, which would crash the
@@ -223,7 +226,7 @@ export function createServer({
 
     let sub: string | undefined;
     if (secret) {
-      const check = await checkToken(token, secret);
+      const check = await checkToken(token, secret, audience);
       if (!check.ok) {
         console.warn(`${tag} token rejected: ${check.reason}`);
         ws.close(4001);
@@ -394,14 +397,18 @@ type TokenCheck = { ok: true; sub?: string } | { ok: false; reason: string };
 async function checkToken(
   token: string | null,
   secret: Uint8Array,
+  audience: string | undefined,
 ): Promise<TokenCheck> {
   if (!token) {
     return { ok: false, reason: "missing" };
   }
   try {
+    // jose checks aud only when audience is given; a list that holds it
+    // passes.
     const { payload } = await jwtVerify(token, secret, {
       algorithms: ["HS256"],
       requiredClaims: ["exp"],
+      audience,
     });
     // jose does not check the type of sub; only a string is logged.
     return {
@@ -427,6 +434,9 @@ function rejectionReason(err: unknown): string {
     err.reason === "missing"
   ) {
     return "missing exp";
+  }
+  if (err instanceof errors.JWTClaimValidationFailed && err.claim === "aud") {
+    return "wrong aud";
   }
   return "invalid";
 }

@@ -39,11 +39,19 @@ async function start(
 }
 
 function sign(
-  options: { secret?: string; exp?: string | number | null; sub?: string } = {},
+  options: {
+    secret?: string;
+    exp?: string | number | null;
+    sub?: string;
+    aud?: string | string[];
+  } = {},
 ): Promise<string> {
   const jwt = new SignJWT({}).setProtectedHeader({ alg: "HS256" });
   if (options.sub !== undefined) {
     jwt.setSubject(options.sub);
+  }
+  if (options.aud !== undefined) {
+    jwt.setAudience(options.aud);
   }
   const exp = options.exp === undefined ? "1h" : options.exp;
   if (exp !== null) {
@@ -150,6 +158,58 @@ for (const { name, token, reason } of rejections) {
     );
   });
 }
+
+const audienceAccepted: { name: string; aud: string | string[] }[] = [
+  { name: "that aud", aud: "dicta" },
+  { name: "a list that holds it", aud: ["other", "dicta"] },
+];
+
+for (const { name, aud } of audienceAccepted) {
+  test(`sends ready with JWT_AUDIENCE set and a token with ${name}`, async (t) => {
+    const { base, shutdown } = await start({
+      auth: { jwtSecret: SECRET, jwtAudience: "dicta" },
+    });
+    t.after(shutdown);
+
+    const ws = listen(base, await sign({ aud }));
+    const message = JSON.parse((await nextMessage(ws)).data);
+
+    assert.equal(message.type, "ready");
+  });
+}
+
+const audienceRejected: { name: string; aud?: string }[] = [
+  { name: "another aud", aud: "dicta-action" },
+  { name: "no aud" },
+];
+
+for (const { name, aud } of audienceRejected) {
+  test(`closes with 4001 with JWT_AUDIENCE set and a token with ${name}`, async (t) => {
+    const { base, shutdown } = await start({
+      auth: { jwtSecret: SECRET, jwtAudience: "dicta" },
+    });
+    t.after(shutdown);
+    const warned = t.mock.method(console, "warn", () => {});
+
+    const ws = listen(base, await sign({ aud }));
+
+    assert.deepEqual(await untilClose(ws), { messages: [], code: 4001 });
+    assert.match(
+      warned.mock.calls[0].arguments[0],
+      /^\[[0-9a-f-]+\] token rejected: wrong aud$/,
+    );
+  });
+}
+
+test("sends ready without JWT_AUDIENCE for a token with any aud", async (t) => {
+  const { base, shutdown } = await start();
+  t.after(shutdown);
+
+  const ws = listen(base, await sign({ aud: "anything" }));
+  const message = JSON.parse((await nextMessage(ws)).data);
+
+  assert.equal(message.type, "ready");
+});
 
 test("logs the close of a rejected connection after the reason", async (t) => {
   const { base, shutdown } = await start();

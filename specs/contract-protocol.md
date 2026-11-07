@@ -20,8 +20,6 @@ In a browser: `new WebSocket(url, ["dicta", jwt])`.
   `Sec-WebSocket-Protocol: dicta`.
 - The token is checked only when the connection opens. An open connection stays
   open after the token expires; a new token is needed only for a new connection.
-- A missing, invalid or expired token: the server closes the socket with code
-  `4001`.
 - The WebSocket opens before the token is checked. Only `ready` means the
   connection is accepted; a close such as `4001` can follow `open`.
 - `lang` is optional: the language the user speaks, as a BCP 47 tag such as
@@ -99,14 +97,9 @@ answer with a pong before the next ping is disconnected. Browsers and common
 WebSocket libraries answer pings automatically.
 
 The server closes a connection with code `1000` when the client has sent no
-message for 10 minutes. Pongs do not count. It is not a failure: the client
-opens a new connection when it needs one. A client that waits longer than that
-for speech, for example in a hands-free session, sends nothing meanwhile and
-gets this close.
-
-The server also closes a connection with code `1000` when it has been open for a
-configured time, 30 minutes by default, also during an utterance. The client
-opens a new connection when it needs one.
+message for 10 minutes (pongs do not count), or when it has been open for a
+configured time, 30 minutes by default, also during an utterance. It is not a
+failure: the client opens a new connection when it needs one.
 
 The server closes a connection with code `1008` when the client sends audio
 faster than real time: when the audio received is more than 30 seconds longer

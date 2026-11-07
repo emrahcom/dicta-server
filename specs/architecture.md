@@ -26,9 +26,7 @@ Message formats are in `contract-protocol.md`.
   without closing, so it does not keep a provider stream open.
 - The idle close in `contract-protocol.md` (Closing) does the same for a client
   that stays connected but sends nothing, because a provider stream is kept
-  open, and may be billed, for as long as the connection is. The 10 minutes are
-  longer than a `dicta-js` hands-free session can wait for speech (5 minutes)
-  plus its own idle close (1 minute).
+  open, and may be billed, for as long as the connection is.
 - Once the server starts to close a connection, for any reason, it ignores what
   the client still sends, so no more audio reaches the provider. The close
   handshake can take up to 30 seconds when the client does not answer it, and
@@ -43,17 +41,8 @@ Message formats are in `contract-protocol.md`.
     checked when the connection opens, so without this limit one token could
     stream for days. With it, a copied token can only be used until its `exp`,
     plus at most this time on each connection opened before then.
-  - Why 30 minutes is the default: `dicta-js` closes its connection after 1
-    minute without voice use, so a connection reaches 30 minutes only when the
-    user starts voice input again and again without a 1 minute break, or in a
-    `toggle` session that long: such a session keeps listening, on one
-    connection, until the user ends it or 5 minutes pass without speech. When
-    the limit falls while `dicta-js` listens, listening stops as after any
-    failure: the button shows it no longer listens, the words of the utterance
-    in progress are lost, finals already received stay, and "Voice failed" is
-    shown. The next press opens a new connection. Between utterances nothing is
-    shown. A shorter time would cut long dictation sessions more often; a longer
-    one lets a copied token cost more.
+  - Why 30 minutes is the default: a shorter time would cut long dictation
+    sessions more often; a longer one lets a copied token cost more.
   - The real-time limit. Audio is 32000 bytes per second (16 kHz, 16-bit, mono).
     The server counts the audio bytes of the connection and closes it when they
     are more than 30 seconds of audio ahead of the time since it opened. The 30
@@ -75,15 +64,13 @@ Message formats are in `contract-protocol.md`.
   one shared secret, a different value on each server keeps a token for one from
   working on the other, and a backend whose tokens already carry an `aud` can be
   used as it is.
-- The upgrade is accepted before the token is checked, so the client can read
-  the `4001` close code.
 
 ## Providers
 
 - Each provider is an adapter behind one interface: open a stream, send audio,
   finish an utterance, receive interim and final transcripts, close.
-- The server finishes an utterance on `end`, or 5 seconds after the last audio
-  frame. The server handles `end` and this timer, not the providers.
+- The server finishes utterances (`contract-protocol.md`, Utterances), not the
+  providers.
 - When audio came since the last finish, the server asks the provider to finish
   at once, so the provider cuts at that point in the audio. The provider's
   answer becomes the final, with empty text when nothing was recognized.
@@ -172,11 +159,6 @@ An unexpected error in a connection is logged and closes that connection with
 `1011`. The process keeps running. This covers the connection setup and every
 event handler of the connection, including the callbacks the server passes to
 the provider.
-
-## State
-
-Instances share nothing. All state belongs to an open connection and is gone
-when it closes. Any instance can serve any user.
 
 ## Logging
 
@@ -295,8 +277,7 @@ Environment variables:
 - `MAX_CONNECTION_MINUTES`: the longest time one connection may stay open, from
   when it opens, a whole number from `1` to `1440` (one day) (Connections).
   Default `30`. The server does not start with another value. The maximum keeps
-  the timer within what Node can set (about 24 days); above that, Node fires it
-  at once and closes every connection right after it opens.
+  the timer well within what Node can set (about 24 days).
 - `PROVIDER`: the speech-to-text provider. Required; the server does not start
   without a known one. Values: `stub`, `mistral`, `deepgram`.
 - `MISTRAL_API_KEY`: required when `PROVIDER` is `mistral`.

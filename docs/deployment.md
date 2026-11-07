@@ -34,7 +34,7 @@ The image is in the GitHub registry. Run it with your settings as environment
 variables:
 
 ```sh
-docker run -p 8080:8080 -e PROVIDER=deepgram -e DEEPGRAM_API_KEY=... \
+docker run -p 8740:8740 -e PROVIDER=deepgram -e DEEPGRAM_API_KEY=... \
   -e JWT_SECRET=... ghcr.io/emrahcom/dicta-server:latest
 ```
 
@@ -76,7 +76,7 @@ server {
   location /dicta/v1/listen {
     limit_conn dicta_conn 10;
     limit_req zone=dicta_req burst=10 nodelay;
-    proxy_pass http://127.0.0.1:8080;
+    proxy_pass http://127.0.0.1:8740;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";

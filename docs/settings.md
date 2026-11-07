@@ -2,7 +2,7 @@
 
 Set them as environment variables.
 
-- `PORT`: the port to listen on. The default is `8080`.
+- `PORT`: the port to listen on. The default is `8740`.
 - `PROVIDER`: the speech-to-text service: `stub`, `mistral` or `deepgram`.
   Required. `stub` needs no key and sends back the number of audio bytes as
   text, for tests.

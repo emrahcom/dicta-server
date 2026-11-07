@@ -17,7 +17,7 @@ npm install
 PROVIDER=stub ALLOW_UNAUTHENTICATED=true npm start
 ```
 
-This runs the server on port 8080, without tokens and with a test service
+This runs the server on port 8740, without tokens and with a test service
 instead of real speech-to-text.
 
 ## Documents

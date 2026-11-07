@@ -16,5 +16,5 @@ RUN npm ci --omit=dev
 COPY src/ src/
 COPY --from=dicta-js /dicta-js/dist/ js/
 USER node
-EXPOSE 8080
+EXPOSE 8740
 CMD ["node", "src/index.ts"]

@@ -10,7 +10,7 @@ const MIN_SECRET_BYTES = 32;
 // Configuration).
 const MAX_CONNECTION_MINUTES = 1440;
 
-const port = Number(process.env.PORT || 8080);
+const port = Number(process.env.PORT || 8740);
 
 let auth: AuthOptions;
 if (process.env.ALLOW_UNAUTHENTICATED === "true") {

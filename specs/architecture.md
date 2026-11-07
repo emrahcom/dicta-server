@@ -168,8 +168,8 @@ the provider.
 - The session id is created when a connection starts. Every log line about a
   connection starts with it: `[<sessionId>] <message>`.
 - A rejected token is logged with the reason (missing, expired, invalid
-  signature, missing `exp`, or invalid for anything else). Neither the token nor
-  anything decoded from it is logged.
+  signature, missing `exp`, wrong `aud`, or invalid for anything else). Neither
+  the token nor anything decoded from it is logged.
 - An accepted connection is logged once as `connected`, with the token's `sub`
   when it has one as a string. No other claim is logged.
 - `sub` is logged in double quotes, escaped like a JSON string, with invisible

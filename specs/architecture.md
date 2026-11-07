@@ -245,7 +245,7 @@ the same place it connects to:
 - Two stages on `node:24-slim`: one builds `dicta-js`; the final one has the
   server's `src/`, its production dependencies and `js/`. No tests, specs, docs
   or dev dependencies.
-- It runs as the `node` user with `node src/index.ts` and exposes `8080`. All
+- It runs as the `node` user with `node src/index.ts` and exposes `8740`. All
   settings come from environment variables (Configuration).
 - No `HEALTHCHECK`: the platform checks `/dicta/health`.
 
@@ -277,7 +277,8 @@ have not closed.
 
 Environment variables:
 
-- `PORT`: the port the server listens on. Default `8080`.
+- `PORT`: the port the server listens on. Default `8740`, away from the ports
+  web apps often use.
 - `JWT_SECRET`: the shared secret for tokens, at least 32 bytes (RFC 7518).
   Required; the server does not start without it or with a shorter one, unless
   `ALLOW_UNAUTHENTICATED` is `true`.

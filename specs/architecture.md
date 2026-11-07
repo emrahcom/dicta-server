@@ -70,6 +70,11 @@ Message formats are in `contract-protocol.md`.
 - HS256 with a shared secret (`JWT_SECRET`). The `jose` package verifies it.
 - `exp` is required and is checked when the connection opens, as the contract
   describes. `sub` is optional and identifies the user.
+- `aud` is checked only when `JWT_AUDIENCE` is set: the token's `aud` must be
+  that value, or a list that holds it, or the token is invalid (`4001`). With
+  one shared secret, a different value on each server keeps a token for one from
+  working on the other, and a backend whose tokens already carry an `aud` can be
+  used as it is.
 - The upgrade is accepted before the token is checked, so the client can read
   the `4001` close code.
 
@@ -282,6 +287,8 @@ Environment variables:
 - `JWT_SECRET`: the shared secret for tokens, at least 32 bytes (RFC 7518).
   Required; the server does not start without it or with a shorter one, unless
   `ALLOW_UNAUTHENTICATED` is `true`.
+- `JWT_AUDIENCE`: the `aud` a token must have (Authentication). No default: when
+  it is not set, `aud` is not checked.
 - `ALLOW_UNAUTHENTICATED`: when `true`, tokens are not checked at all. For
   development only. Default `false`. The server logs a warning at startup when
   it is on.

@@ -1,8 +1,6 @@
 # Releasing
 
-How to release a new version of
-[dicta-server](https://github.com/emrahcom/dicta-server). This is for the
-maintainers.
+How to release a new version of dicta-server. This is for the maintainers.
 
 ## Version numbers
 

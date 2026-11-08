@@ -27,7 +27,7 @@ instead of real speech-to-text.
 - Deployment:\
   https://github.com/emrahcom/dicta-server/blob/main/docs/deployment.md
 
-The protocol and the design are in `specs/`, for developers of dicta.
+The protocol and the design are in [`specs/`](specs/), for developers of dicta.
 
 ## License
 

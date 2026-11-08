@@ -13,7 +13,8 @@ enough, and the server can share a domain with other services.
 
 ## dicta-js
 
-The server can also serve dicta-js, so pages load it from the same address:
+The server can also serve [dicta-js](https://github.com/emrahcom/dicta-js), so
+pages load it from the same address:
 
 ```html
 <script

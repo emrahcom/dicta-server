@@ -1,6 +1,8 @@
 # Releasing
 
-How to release a new version of dicta-server. This is for the maintainers.
+How to release a new version of
+[dicta-server](https://github.com/emrahcom/dicta-server). This is for the
+maintainers.
 
 ## Version numbers
 
@@ -14,9 +16,10 @@ While the major number is 0:
 - Raise the patch number for everything else: fixes and new features that do not
   break setups. `0.1.3` becomes `0.1.4`.
 
-dicta-server and dicta-js have their own version numbers. They work together
-through the protocol version, the `v1` in `/dicta/v1/listen`. A change that
-breaks the protocol needs a new protocol version, not only a new version number.
+dicta-server and [dicta-js](https://github.com/emrahcom/dicta-js) have their own
+version numbers. They work together through the protocol version, the `v1` in
+`/dicta/v1/listen`. A change that breaks the protocol needs a new protocol
+version, not only a new version number.
 
 ## Steps
 

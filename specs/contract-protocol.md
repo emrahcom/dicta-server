@@ -98,8 +98,9 @@ WebSocket libraries answer pings automatically.
 
 The server closes a connection with code `1000` when the client has sent no
 message for 10 minutes (pongs do not count), or when it has been open for a
-configured time, 30 minutes by default, also during an utterance. It is not a
-failure: the client opens a new connection when it needs one.
+configured time, 30 minutes by default, also during an utterance, which is then
+lost. The close itself is not a failure: the client opens a new connection when
+it needs one.
 
 The server closes a connection with code `1008` when the client sends audio
 faster than real time: when the audio received is more than 30 seconds longer

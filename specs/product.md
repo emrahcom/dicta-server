@@ -22,7 +22,7 @@ dicta-server is the server side. It receives a user's microphone audio from
 - Not a general-purpose transcription service. Using it for plain speech-to-text
   works, but features are driven by what applications need from user input.
 
-## First version
+## Features
 
 - Authenticated WebSocket connection.
 - Audio in, transcripts out: interim results while the user speaks, a final
@@ -32,5 +32,5 @@ dicta-server is the server side. It receives a user's microphone audio from
 Turning the text into the application's actions (tool calls) is not part of
 dicta-server. `dicta-js` and dicta-server are complete without it: the
 application gets the text and handles it itself. Applications that want actions
-can add the optional `dicta-action-server`, which takes the text that `dicta-js`
-delivers.
+can add the optional `dicta-action-js`, which takes the text that `dicta-js`
+delivers, with its `dicta-action-server`.

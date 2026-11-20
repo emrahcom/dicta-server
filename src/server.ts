@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { createServer as createHttpServer, type Server } from "node:http";
 import type { Duplex } from "node:stream";
-import { errors, jwtVerify } from "jose";
 import { WebSocketServer, type WebSocket } from "ws";
-import { loadJsFiles } from "./js-files.ts";
+import { checkToken, PROTOCOL, tokenFromProtocols } from "./auth.ts";
+import { loadJsFiles, serveJsFile } from "./js-files.ts";
 import { errorMessage, quoteForLog } from "./logging.ts";
 import { parseMessage } from "./providers/messages.ts";
 import type {
@@ -17,8 +17,6 @@ const LISTEN_PATH = "/dicta/v1/listen";
 const HEALTH_PATH = "/dicta/health";
 // The built dicta-js; see architecture.md (dicta-js files).
 const JS_PREFIX = "/dicta/js/";
-// The WebSocket protocol name; the JWT follows it in Sec-WebSocket-Protocol.
-const PROTOCOL = "dicta";
 const MAX_FRAME_BYTES = 64 * 1024;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 // A connection whose client sent nothing for this long is closed with 1000.
@@ -74,22 +72,7 @@ export function createServer({
     if (read && path === HEALTH_PATH) {
       res.writeHead(200, { "content-type": "text/plain" }).end("ok");
     } else if (read && jsFile) {
-      const headers = {
-        "cache-control": "no-cache",
-        etag: jsFile.etag,
-        "access-control-allow-origin": "*",
-      };
-      // A proxy may have made the tag weak (W/) or listed several.
-      const current = req.headers["if-none-match"]
-        ?.split(",")
-        .some((tag) => tag.trim().replace(/^W\//, "") === jsFile.etag);
-      if (current) {
-        res.writeHead(304, headers).end();
-      } else {
-        res
-          .writeHead(200, { ...headers, "content-type": "text/javascript" })
-          .end(jsFile.body);
-      }
+      serveJsFile(req, res, jsFile);
     } else {
       res.writeHead(404).end();
     }
@@ -141,11 +124,6 @@ export function createServer({
       socket.removeListener("error", onSocketError);
       const sessionId = randomUUID();
       const tag = `[${sessionId}]`;
-      const closeIfOpen = (code: number) => {
-        if (ws.readyState === ws.OPEN) {
-          ws.close(code);
-        }
-      };
       // Without a listener, a protocol error (for example a too large frame)
       // would crash the process. ws closes the connection itself.
       ws.on("error", (err) =>
@@ -153,46 +131,10 @@ export function createServer({
       );
       answered.add(ws);
       ws.on("pong", () => answered.add(ws));
-      // An idle client would keep its provider stream open, and maybe billed.
-      // The close also closes the provider stream. Pongs do not count.
-      let idleTimer: NodeJS.Timeout | undefined;
-      const restartIdleTimer = () => {
-        clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => closeIfOpen(1000), IDLE_CLOSE_MS);
-      };
-      restartIdleTimer();
-      // The age limit and the real-time limit; see architecture.md
-      // (Connections).
-      const ageTimer = setTimeout(() => closeIfOpen(1000), maxConnectionMs);
-      const openedAt = performance.now();
-      let audioBytes = 0;
-      // Once a close starts, ws still delivers messages until the client
-      // answers it; they are ignored (architecture.md, Connections).
-      ws.on("message", (data, isBinary) => {
-        if (ws.readyState !== ws.OPEN) {
-          return;
-        }
-        restartIdleTimer();
-        if (!isBinary) {
-          return;
-        }
-        audioBytes += (data as Buffer).length;
-        const seconds = (performance.now() - openedAt) / 1000;
-        const allowed =
-          (seconds + AUDIO_AHEAD_SECONDS) * AUDIO_BYTES_PER_SECOND;
-        if (audioBytes > allowed) {
-          ws.close(1008);
-        }
-      });
-      ws.on("close", (code) => {
-        clearTimeout(idleTimer);
-        clearTimeout(ageTimer);
-        const audio = Math.round(audioBytes / AUDIO_BYTES_PER_SECOND);
-        console.log(`${tag} closed code=${code} audio=${audio}s`);
-      });
+      watchLimits(ws, tag, maxConnectionMs);
       const unexpected = (err: unknown) => {
         console.error(`${tag} unexpected error: ${errorMessage(err)}`);
-        closeIfOpen(1011);
+        closeIfOpen(ws, 1011);
       };
       const token = tokenFromProtocols(req.headers["sec-websocket-protocol"]);
       // ws ignores the callback's return value, so an error left in this
@@ -378,60 +320,49 @@ function isEndMessage(raw: Buffer): boolean {
   return parseMessage<{ type?: unknown }>(raw)?.type === "end";
 }
 
-// The JWT is the entry after "dicta" in the Sec-WebSocket-Protocol header.
-function tokenFromProtocols(header: string | undefined): string | null {
-  const entries = header?.split(",").map((entry) => entry.trim()) ?? [];
-  const index = entries.indexOf(PROTOCOL);
-  return index === -1 ? null : (entries[index + 1] ?? null);
+// The limits of a connection (architecture.md, Connections): the idle close,
+// the age limit and the real-time limit, and the close log line.
+function watchLimits(ws: WebSocket, tag: string, maxConnectionMs: number) {
+  // An idle client would keep its provider stream open, and maybe billed.
+  // The close also closes the provider stream. Pongs do not count.
+  let idleTimer: NodeJS.Timeout | undefined;
+  const restartIdleTimer = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => closeIfOpen(ws, 1000), IDLE_CLOSE_MS);
+  };
+  restartIdleTimer();
+  const ageTimer = setTimeout(() => closeIfOpen(ws, 1000), maxConnectionMs);
+  const openedAt = performance.now();
+  let audioBytes = 0;
+  // Once a close starts, ws still delivers messages until the client
+  // answers it; they are ignored (architecture.md, Connections).
+  ws.on("message", (data, isBinary) => {
+    if (ws.readyState !== ws.OPEN) {
+      return;
+    }
+    restartIdleTimer();
+    if (!isBinary) {
+      return;
+    }
+    audioBytes += (data as Buffer).length;
+    const seconds = (performance.now() - openedAt) / 1000;
+    const allowed = (seconds + AUDIO_AHEAD_SECONDS) * AUDIO_BYTES_PER_SECOND;
+    if (audioBytes > allowed) {
+      ws.close(1008);
+    }
+  });
+  ws.on("close", (code) => {
+    clearTimeout(idleTimer);
+    clearTimeout(ageTimer);
+    const audio = Math.round(audioBytes / AUDIO_BYTES_PER_SECOND);
+    console.log(`${tag} closed code=${code} audio=${audio}s`);
+  });
 }
 
-type TokenCheck = { ok: true; sub?: string } | { ok: false; reason: string };
-
-async function checkToken(
-  token: string | null,
-  secret: Uint8Array,
-  audience: string | undefined,
-): Promise<TokenCheck> {
-  if (!token) {
-    return { ok: false, reason: "missing" };
+function closeIfOpen(ws: WebSocket, code: number) {
+  if (ws.readyState === ws.OPEN) {
+    ws.close(code);
   }
-  try {
-    // jose checks aud only when audience is given; a list that holds it
-    // passes.
-    const { payload } = await jwtVerify(token, secret, {
-      algorithms: ["HS256"],
-      requiredClaims: ["exp"],
-      audience,
-    });
-    // jose does not check the type of sub; only a string is logged.
-    return {
-      ok: true,
-      sub: typeof payload.sub === "string" ? payload.sub : undefined,
-    };
-  } catch (err) {
-    return { ok: false, reason: rejectionReason(err) };
-  }
-}
-
-// Only fixed strings: nothing from an unverified token reaches the log.
-function rejectionReason(err: unknown): string {
-  if (err instanceof errors.JWTExpired) {
-    return "expired";
-  }
-  if (err instanceof errors.JWSSignatureVerificationFailed) {
-    return "invalid signature";
-  }
-  if (
-    err instanceof errors.JWTClaimValidationFailed &&
-    err.claim === "exp" &&
-    err.reason === "missing"
-  ) {
-    return "missing exp";
-  }
-  if (err instanceof errors.JWTClaimValidationFailed && err.claim === "aud") {
-    return "wrong aud";
-  }
-  return "invalid";
 }
 
 // Answers an upgrade request with an HTTP status and closes the socket. A plain

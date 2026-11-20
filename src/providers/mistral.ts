@@ -8,12 +8,13 @@
 
 import WebSocket from "ws";
 import { quoteForLog } from "../logging.ts";
-import { parseMessage, unknownTypeWarning } from "./messages.ts";
+import { parseOrWarn, unknownTypeWarning } from "./messages.ts";
 import {
-  MAX_PROVIDER_BUFFER_BYTES,
+  keepsUp,
   OPEN_TIMEOUT_MS,
   type OpenStream,
   type ProviderStream,
+  type StreamEvents,
 } from "./provider.ts";
 
 export const MISTRAL_DEFAULT_MODEL = "voxtral-mini-transcribe-realtime-3";
@@ -29,14 +30,13 @@ export function createMistral({
   model: string;
   url?: string;
 }): OpenStream {
-  return ({ onTranscript, onError, onWarning }, { lang }) =>
+  return (events, { lang }) =>
     new Promise((resolve, reject) => {
       const ws = new WebSocket(`${url}?model=${encodeURIComponent(model)}`, {
         headers: { Authorization: `Bearer ${apiKey}` },
       });
       let state: "opening" | "open" | "closed" = "opening";
-      // Text received since the last final.
-      let pending = "";
+      const utterance: Utterance = { pending: "" };
 
       const openTimer = setTimeout(
         () =>
@@ -47,13 +47,6 @@ export function createMistral({
           ),
         OPEN_TIMEOUT_MS,
       );
-
-      // The answer to a flush is the final of the utterance, also when empty.
-      const sendFinal = () => {
-        const text = pending.trim();
-        pending = "";
-        onTranscript({ text, final: true });
-      };
 
       // Ends the stream on any failure. Before it is open, it rejects the open.
       // After it, it reports the error.
@@ -68,7 +61,7 @@ export function createMistral({
         ws.terminate();
         // The unfinished utterance is discarded, never sent as a final.
         if (wasOpen) {
-          onError(error);
+          events.onError(error);
         } else {
           reject(error);
         }
@@ -76,11 +69,7 @@ export function createMistral({
 
       const stream: ProviderStream = {
         sendAudio(chunk) {
-          if (state !== "open") {
-            return;
-          }
-          if (ws.bufferedAmount > MAX_PROVIDER_BUFFER_BYTES) {
-            fail(new Error("provider does not keep up"));
+          if (state !== "open" || !keepsUp(ws, fail)) {
             return;
           }
           ws.send(
@@ -109,49 +98,19 @@ export function createMistral({
         },
       };
 
-      const handleMessage = (message: MistralMessage) => {
-        switch (message.type) {
-          case "session.created":
-            if (state === "opening") {
-              ws.send(
-                JSON.stringify({
-                  type: "session.update",
-                  session: {
-                    audio_format: { encoding: "pcm_s16le", sample_rate: 16000 },
-                    ...mistralLanguage(lang),
-                  },
-                }),
-              );
-              state = "open";
-              clearTimeout(openTimer);
-              resolve(stream);
-            }
-            break;
-          case "transcription.text.delta":
-            // Nothing reaches the client before the stream is open.
-            if (state !== "open") {
-              break;
-            }
-            // A final comes only from the flush. A sentence end is no sign of
-            // one, since a period arrives as its own delta ("Dr. Smith").
-            pending += message.text ?? "";
-            if (pending.trim()) {
-              onTranscript({ text: pending.trim(), final: false });
-            }
-            break;
-          case "transcription.done":
-            if (state === "open") {
-              sendFinal();
-            }
-            break;
-          case "error":
-            fail(new Error(`Mistral error: ${describeError(message.error)}`));
-            break;
-          case "session.updated":
-            break;
-          default:
-            onWarning(unknownTypeWarning(message.type));
-        }
+      const openSession = () => {
+        ws.send(
+          JSON.stringify({
+            type: "session.update",
+            session: {
+              audio_format: { encoding: "pcm_s16le", sample_rate: 16000 },
+              ...mistralLanguage(lang),
+            },
+          }),
+        );
+        state = "open";
+        clearTimeout(openTimer);
+        resolve(stream);
       };
 
       ws.on("unexpected-response", (_req, res) =>
@@ -164,23 +123,72 @@ export function createMistral({
         fail(new Error(`Mistral closed the connection: ${code}`)),
       );
       // A provider catches errors in its own handlers (architecture.md).
+      // Mistral sends text frames only; every frame is read as JSON.
       ws.on("message", (data) => {
         if (state === "closed") {
           return;
         }
         try {
-          const raw = data as Buffer;
-          const message = parseMessage<MistralMessage>(raw);
-          if (message === undefined) {
-            onWarning(`unparseable message (${raw.length} bytes)`);
-            return;
+          const message = parseOrWarn<MistralMessage>(
+            data as Buffer,
+            false,
+            events.onWarning,
+          );
+          if (message?.type === "session.created") {
+            if (state === "opening") {
+              openSession();
+            }
+          } else if (message !== undefined) {
+            handleMessage(message, state === "open", utterance, events, fail);
           }
-          handleMessage(message);
         } catch (err) {
           fail(err);
         }
       });
     });
+}
+
+// pending: the text received since the last final.
+type Utterance = { pending: string };
+
+// Every message but session.created, which opens the stream. open: whether
+// the stream is open.
+function handleMessage(
+  message: MistralMessage,
+  open: boolean,
+  utterance: Utterance,
+  { onTranscript, onWarning }: StreamEvents,
+  fail: (err: unknown) => void,
+) {
+  switch (message.type) {
+    case "transcription.text.delta":
+      // Nothing reaches the client before the stream is open.
+      if (!open) {
+        break;
+      }
+      // A final comes only from the flush. A sentence end is no sign of one,
+      // since a period arrives as its own delta ("Dr. Smith").
+      utterance.pending += message.text ?? "";
+      if (utterance.pending.trim()) {
+        onTranscript({ text: utterance.pending.trim(), final: false });
+      }
+      break;
+    case "transcription.done":
+      // The answer to a flush is the final of the utterance, also when empty.
+      if (open) {
+        const text = utterance.pending.trim();
+        utterance.pending = "";
+        onTranscript({ text, final: true });
+      }
+      break;
+    case "error":
+      fail(new Error(`Mistral error: ${describeError(message.error)}`));
+      break;
+    case "session.updated":
+      break;
+    default:
+      onWarning(unknownTypeWarning(message.type));
+  }
 }
 
 type MistralMessage = {

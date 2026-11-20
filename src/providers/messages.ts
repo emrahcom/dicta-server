@@ -19,3 +19,17 @@ export function parseMessage<T extends object>(raw: Buffer): T | undefined {
 export function unknownTypeWarning(type: unknown): string {
   return `unknown message type ${quoteForLog(String(type))}`;
 }
+
+// A text frame as a JSON object. Anything else is reported as a warning and
+// gives undefined (architecture.md, Providers).
+export function parseOrWarn<T extends object>(
+  raw: Buffer,
+  isBinary: boolean,
+  onWarning: (warning: string) => void,
+): T | undefined {
+  const message = isBinary ? undefined : parseMessage<T>(raw);
+  if (message === undefined) {
+    onWarning(`unparseable message (${raw.length} bytes)`);
+  }
+  return message;
+}

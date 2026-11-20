@@ -31,7 +31,20 @@ export type OpenStream = (
 
 // More audio than this waiting in a provider socket means the provider does
 // not keep up, and the stream fails (architecture.md, Providers).
-export const MAX_PROVIDER_BUFFER_BYTES = 1024 * 1024;
+const MAX_PROVIDER_BUFFER_BYTES = 1024 * 1024;
+
+// Whether the provider keeps up with the audio. When it does not, the stream
+// fails through fail.
+export function keepsUp(
+  socket: { bufferedAmount: number },
+  fail: (err: Error) => void,
+): boolean {
+  if (socket.bufferedAmount > MAX_PROVIDER_BUFFER_BYTES) {
+    fail(new Error("provider does not keep up"));
+    return false;
+  }
+  return true;
+}
 
 // A provider stream that is not open within this time fails.
 export const OPEN_TIMEOUT_MS = 10_000;

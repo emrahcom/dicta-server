@@ -9,9 +9,9 @@
 
 import WebSocket from "ws";
 import { quoteForLog } from "../logging.ts";
-import { parseMessage, unknownTypeWarning } from "./messages.ts";
+import { parseOrWarn, unknownTypeWarning } from "./messages.ts";
 import {
-  MAX_PROVIDER_BUFFER_BYTES,
+  keepsUp,
   OPEN_TIMEOUT_MS,
   type OpenStream,
   type ProviderStream,
@@ -47,7 +47,7 @@ export function createDeepgram({
   }
 
   const connect = (
-    { onTranscript, onError, onWarning }: StreamEvents,
+    events: StreamEvents,
     language: string | undefined,
   ): Promise<ProviderStream> =>
     new Promise((resolve, reject) => {
@@ -60,7 +60,7 @@ export function createDeepgram({
       });
       let state: "opening" | "open" | "closed" = "opening";
       // Finished segments of the current utterance.
-      let segments: string[] = [];
+      const segments: string[] = [];
       let keepAlive: NodeJS.Timeout | undefined;
 
       const openTimer = setTimeout(
@@ -75,13 +75,6 @@ export function createDeepgram({
         } catch (err) {
           fail(err);
         }
-      };
-
-      // The answer to Finalize is the final of the utterance, also when empty.
-      const sendFinal = () => {
-        const text = segments.join(" ");
-        segments = [];
-        onTranscript({ text, final: true });
       };
 
       const stopTimers = () => {
@@ -102,7 +95,7 @@ export function createDeepgram({
         ws.terminate();
         // The unfinished utterance is discarded, never sent as a final.
         if (wasOpen) {
-          onError(error);
+          events.onError(error);
         } else {
           reject(error);
         }
@@ -110,11 +103,7 @@ export function createDeepgram({
 
       const stream: ProviderStream = {
         sendAudio(chunk) {
-          if (state !== "open") {
-            return;
-          }
-          if (ws.bufferedAmount > MAX_PROVIDER_BUFFER_BYTES) {
-            fail(new Error("provider does not keep up"));
+          if (state !== "open" || !keepsUp(ws, fail)) {
             return;
           }
           ws.send(chunk);
@@ -132,42 +121,6 @@ export function createDeepgram({
           stopTimers();
           ws.close();
         },
-      };
-
-      const handleResults = (message: DeepgramMessage) => {
-        const transcript = message.channel?.alternatives?.[0]?.transcript ?? "";
-        if (message.is_final && transcript) {
-          segments.push(transcript);
-        }
-        // Only the answer to Finalize ends the utterance. speech_final does
-        // not, so a pause inside a command does not split it.
-        if (message.is_final && message.from_finalize) {
-          sendFinal();
-          return;
-        }
-        const text = [...segments, message.is_final ? "" : transcript]
-          .filter((part) => part)
-          .join(" ");
-        if (text) {
-          onTranscript({ text, final: false });
-        }
-      };
-
-      const handleMessage = (message: DeepgramMessage) => {
-        switch (message.type) {
-          case "Results":
-            handleResults(message);
-            break;
-          case "Error":
-            onWarning(`Deepgram error: ${describeError(message)}`);
-            break;
-          case "Metadata":
-          case "SpeechStarted":
-          case "UtteranceEnd":
-            break;
-          default:
-            onWarning(unknownTypeWarning(message.type));
-        }
       };
 
       ws.on("open", () => {
@@ -199,15 +152,14 @@ export function createDeepgram({
           return;
         }
         try {
-          const raw = data as Buffer;
-          const message = isBinary
-            ? undefined
-            : parseMessage<DeepgramMessage>(raw);
-          if (message === undefined) {
-            onWarning(`unparseable message (${raw.length} bytes)`);
-            return;
+          const message = parseOrWarn<DeepgramMessage>(
+            data as Buffer,
+            isBinary,
+            events.onWarning,
+          );
+          if (message !== undefined) {
+            handleMessage(message, segments, events);
           }
-          handleMessage(message);
         } catch (err) {
           fail(err);
         }
@@ -256,6 +208,53 @@ type DeepgramMessage = {
   description?: unknown;
   message?: unknown;
 };
+
+function handleMessage(
+  message: DeepgramMessage,
+  segments: string[],
+  { onTranscript, onWarning }: StreamEvents,
+) {
+  switch (message.type) {
+    case "Results":
+      handleResults(message, segments, onTranscript);
+      break;
+    case "Error":
+      onWarning(`Deepgram error: ${describeError(message)}`);
+      break;
+    case "Metadata":
+    case "SpeechStarted":
+    case "UtteranceEnd":
+      break;
+    default:
+      onWarning(unknownTypeWarning(message.type));
+  }
+}
+
+// segments: the finished segments of the current utterance.
+function handleResults(
+  message: DeepgramMessage,
+  segments: string[],
+  onTranscript: StreamEvents["onTranscript"],
+) {
+  const transcript = message.channel?.alternatives?.[0]?.transcript ?? "";
+  if (message.is_final && transcript) {
+    segments.push(transcript);
+  }
+  // Only the answer to Finalize ends the utterance. speech_final does not, so
+  // a pause inside a command does not split it. The answer is the final of the
+  // utterance, also when empty.
+  if (message.is_final && message.from_finalize) {
+    const text = segments.splice(0).join(" ");
+    onTranscript({ text, final: true });
+    return;
+  }
+  const text = [...segments, message.is_final ? "" : transcript]
+    .filter((part) => part)
+    .join(" ");
+  if (text) {
+    onTranscript({ text, final: false });
+  }
+}
 
 // Deepgram's own description of an error, never other message content.
 function describeError(message: DeepgramMessage): string {

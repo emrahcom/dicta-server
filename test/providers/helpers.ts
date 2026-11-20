@@ -11,8 +11,8 @@ export type FakeServer = Awaited<ReturnType<typeof fakeServer>>;
 
 // A provider's server inside the test. It records what the provider sends,
 // JSON as objects and binary frames as Buffers, and lets the test decide what
-// to answer. `refuse` returns an HTTP status to refuse a request with, given its
-// URL.
+// to answer. `refuse` returns an HTTP status to refuse a request with, given
+// its URL.
 export async function fakeServer(
   t: TestContext,
   options: { refuse?: (url: string) => number | undefined } = {},

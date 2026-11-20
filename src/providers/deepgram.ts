@@ -12,6 +12,7 @@ import { quoteForLog } from "../logging.ts";
 import { parseMessage, unknownTypeWarning } from "./messages.ts";
 import {
   MAX_PROVIDER_BUFFER_BYTES,
+  OPEN_TIMEOUT_MS,
   type OpenStream,
   type ProviderStream,
   type StreamEvents,
@@ -20,7 +21,6 @@ import {
 export const DEEPGRAM_DEFAULT_MODEL = "nova-3";
 
 const DEEPGRAM_URL = "wss://api.deepgram.com/v1/listen";
-const OPEN_TIMEOUT_MS = 10_000;
 const KEEPALIVE_INTERVAL_MS = 4000;
 
 export function createDeepgram({
@@ -64,7 +64,8 @@ export function createDeepgram({
       let keepAlive: NodeJS.Timeout | undefined;
 
       const openTimer = setTimeout(
-        () => fail(new Error("not open within 10 seconds")),
+        () =>
+          fail(new Error(`not open within ${OPEN_TIMEOUT_MS / 1000} seconds`)),
         OPEN_TIMEOUT_MS,
       );
 
@@ -219,20 +220,20 @@ export function createDeepgram({
     try {
       return await connect(events, lang);
     } catch (err) {
+      // The language code alone; empty without a lang.
+      const code = lang?.split("-")[0] ?? "";
       if (
-        !(err instanceof RefusedError && err.status === 400) ||
-        lang === undefined
+        err instanceof RefusedError &&
+        err.status === 400 &&
+        lang !== undefined &&
+        code !== lang
       ) {
-        throw err;
+        events.onWarning(
+          `Deepgram refused lang ${quoteForLog(lang)}, using ${quoteForLog(code)}`,
+        );
+        return connect(events, code);
       }
-      const code = lang.split("-")[0];
-      if (code === lang) {
-        throw err;
-      }
-      events.onWarning(
-        `Deepgram refused lang ${quoteForLog(lang)}, using ${quoteForLog(code)}`,
-      );
-      return connect(events, code);
+      throw err;
     }
   };
 }

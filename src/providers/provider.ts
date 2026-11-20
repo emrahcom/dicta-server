@@ -32,3 +32,6 @@ export type OpenStream = (
 // More audio than this waiting in a provider socket means the provider does
 // not keep up, and the stream fails (architecture.md, Providers).
 export const MAX_PROVIDER_BUFFER_BYTES = 1024 * 1024;
+
+// A provider stream that is not open within this time fails.
+export const OPEN_TIMEOUT_MS = 10_000;

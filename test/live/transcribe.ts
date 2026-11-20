@@ -20,10 +20,10 @@ const silence = Buffer.alloc(2 * 32000); // 2 seconds
 
 // The clip twice, then silence only, then `end` with no audio. Each must get
 // exactly one final: the clip's words, the clip's words, empty, empty.
-export const UTTERANCES = [clip, clip, silence, Buffer.alloc(0)];
+const UTTERANCES = [clip, clip, silence, Buffer.alloc(0)];
 
 // The words the fixture clip says, as a provider may write them.
-export const FIXTURE_WORDS = ["westminster", "wordsworth", "librivox"];
+const FIXTURE_WORDS = ["westminster", "wordsworth", "librivox"];
 
 export async function transcribeUtterances(
   t: TestContext,

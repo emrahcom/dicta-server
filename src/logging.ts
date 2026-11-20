@@ -22,3 +22,8 @@ export function quoteForLog(value: string): string {
   );
   return cut ? `${quoted}...` : quoted;
 }
+
+// The message of a thrown value, which need not be an Error.
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}

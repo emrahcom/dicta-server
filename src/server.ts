@@ -4,7 +4,7 @@ import type { Duplex } from "node:stream";
 import { errors, jwtVerify } from "jose";
 import { WebSocketServer, type WebSocket } from "ws";
 import { loadJsFiles } from "./js-files.ts";
-import { quoteForLog } from "./logging.ts";
+import { errorMessage, quoteForLog } from "./logging.ts";
 import { parseMessage } from "./providers/messages.ts";
 import type {
   OpenStream,
@@ -56,9 +56,12 @@ export function createServer({
   server: Server;
   shutdown: () => Promise<void>;
 } {
-  const secret =
-    "jwtSecret" in auth ? new TextEncoder().encode(auth.jwtSecret) : null;
-  const audience = "jwtSecret" in auth ? auth.jwtAudience : undefined;
+  let secret: Uint8Array | null = null;
+  let audience: string | undefined;
+  if ("jwtSecret" in auth) {
+    secret = new TextEncoder().encode(auth.jwtSecret);
+    audience = auth.jwtAudience;
+  }
   const jsFiles = jsFolder ? loadJsFiles(jsFolder) : new Map();
   const server = createHttpServer((req, res) => {
     // Not new URL(): it throws on some malformed paths, which would crash the
@@ -138,6 +141,11 @@ export function createServer({
       socket.removeListener("error", onSocketError);
       const sessionId = randomUUID();
       const tag = `[${sessionId}]`;
+      const closeIfOpen = (code: number) => {
+        if (ws.readyState === ws.OPEN) {
+          ws.close(code);
+        }
+      };
       // Without a listener, a protocol error (for example a too large frame)
       // would crash the process. ws closes the connection itself.
       ws.on("error", (err) =>
@@ -150,38 +158,29 @@ export function createServer({
       let idleTimer: NodeJS.Timeout | undefined;
       const restartIdleTimer = () => {
         clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => {
-          if (ws.readyState === ws.OPEN) {
-            ws.close(1000);
-          }
-        }, IDLE_CLOSE_MS);
+        idleTimer = setTimeout(() => closeIfOpen(1000), IDLE_CLOSE_MS);
       };
       restartIdleTimer();
-      // Once a close starts, ws still delivers messages until the client
-      // answers it; they are ignored (architecture.md, Connections).
-      ws.on("message", () => {
-        if (ws.readyState === ws.OPEN) {
-          restartIdleTimer();
-        }
-      });
       // The age limit and the real-time limit; see architecture.md
       // (Connections).
-      const ageTimer = setTimeout(() => {
-        if (ws.readyState === ws.OPEN) {
-          ws.close(1000);
-        }
-      }, maxConnectionMs);
+      const ageTimer = setTimeout(() => closeIfOpen(1000), maxConnectionMs);
       const openedAt = performance.now();
       let audioBytes = 0;
+      // Once a close starts, ws still delivers messages until the client
+      // answers it; they are ignored (architecture.md, Connections).
       ws.on("message", (data, isBinary) => {
-        if (!isBinary || ws.readyState !== ws.OPEN) {
+        if (ws.readyState !== ws.OPEN) {
+          return;
+        }
+        restartIdleTimer();
+        if (!isBinary) {
           return;
         }
         audioBytes += (data as Buffer).length;
         const seconds = (performance.now() - openedAt) / 1000;
         const allowed =
           (seconds + AUDIO_AHEAD_SECONDS) * AUDIO_BYTES_PER_SECOND;
-        if (audioBytes > allowed && ws.readyState === ws.OPEN) {
+        if (audioBytes > allowed) {
           ws.close(1008);
         }
       });
@@ -193,13 +192,11 @@ export function createServer({
       });
       const unexpected = (err: unknown) => {
         console.error(`${tag} unexpected error: ${errorMessage(err)}`);
-        if (ws.readyState === ws.OPEN) {
-          ws.close(1011);
-        }
+        closeIfOpen(1011);
       };
+      const token = tokenFromProtocols(req.headers["sec-websocket-protocol"]);
       // ws ignores the callback's return value, so an error left in this
       // promise would crash the process.
-      const token = tokenFromProtocols(req.headers["sec-websocket-protocol"]);
       handleConnection(ws, url, token, sessionId, unexpected).catch(unexpected);
     });
   });
@@ -374,10 +371,6 @@ export function createServer({
   }
 
   return { server, shutdown };
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 // A text frame {"type":"end"} from the client. Other text frames are ignored.

@@ -3,9 +3,11 @@ import { createMistral, MISTRAL_DEFAULT_MODEL } from "./mistral.ts";
 import type { OpenStream } from "./provider.ts";
 import { openStubStream } from "./stub.ts";
 
+type CreateProvider = (env: NodeJS.ProcessEnv) => OpenStream;
+
 // Each provider is created from the environment. It throws when its
 // configuration is incomplete.
-const providers: Record<string, (env: NodeJS.ProcessEnv) => OpenStream> = {
+const providers: Record<string, CreateProvider> = {
   stub: () => openStubStream,
   mistral: (env) => {
     if (!env.MISTRAL_API_KEY) {
@@ -32,7 +34,7 @@ export const providerNames = Object.keys(providers);
 
 export function getProvider(
   name: string | undefined,
-): ((env: NodeJS.ProcessEnv) => OpenStream) | undefined {
+): CreateProvider | undefined {
   return name !== undefined && Object.hasOwn(providers, name)
     ? providers[name]
     : undefined;

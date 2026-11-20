@@ -11,6 +11,7 @@ import { quoteForLog } from "../logging.ts";
 import { parseMessage, unknownTypeWarning } from "./messages.ts";
 import {
   MAX_PROVIDER_BUFFER_BYTES,
+  OPEN_TIMEOUT_MS,
   type OpenStream,
   type ProviderStream,
 } from "./provider.ts";
@@ -18,7 +19,6 @@ import {
 export const MISTRAL_DEFAULT_MODEL = "voxtral-mini-transcribe-realtime-3";
 
 const MISTRAL_URL = "wss://api.mistral.ai/v1/audio/transcriptions/realtime";
-const OPEN_TIMEOUT_MS = 10_000;
 
 export function createMistral({
   apiKey,
@@ -39,7 +39,12 @@ export function createMistral({
       let pending = "";
 
       const openTimer = setTimeout(
-        () => fail(new Error("no session.created within 10 seconds")),
+        () =>
+          fail(
+            new Error(
+              `no session.created within ${OPEN_TIMEOUT_MS / 1000} seconds`,
+            ),
+          ),
         OPEN_TIMEOUT_MS,
       );
 
@@ -85,8 +90,8 @@ export function createMistral({
             }),
           );
         },
-        // Asks Mistral to flush: the text of the utterance comes as a final with
-        // transcription.done.
+        // Asks Mistral to flush: the text of the utterance comes as a final
+        // with transcription.done.
         finish() {
           if (state !== "open") {
             return;
@@ -187,12 +192,14 @@ type MistralMessage = {
 // Mistral's own description of an error, quoted for the log. error.message is
 // a string or an object with details.
 function describeError(error: MistralMessage["error"]): string {
-  const message =
-    typeof error?.message === "string"
-      ? error.message
-      : error?.message === undefined
-        ? "no description"
-        : JSON.stringify(error.message);
+  let message: string;
+  if (typeof error?.message === "string") {
+    message = error.message;
+  } else if (error?.message === undefined) {
+    message = "no description";
+  } else {
+    message = JSON.stringify(error.message);
+  }
   return quoteForLog(
     error?.code === undefined ? message : `${error.code} ${message}`,
   );

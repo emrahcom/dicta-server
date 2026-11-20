@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { errorMessage } from "./logging.ts";
 import { getProvider, providerNames } from "./providers/index.ts";
 import type { OpenStream } from "./providers/provider.ts";
 import { createServer, type AuthOptions } from "./server.ts";
@@ -8,7 +9,7 @@ const SHUTDOWN_TIMEOUT_MS = 5000;
 const MIN_SECRET_BYTES = 32;
 // One day; it keeps the age timer within what Node can set (architecture.md,
 // Configuration).
-const MAX_CONNECTION_MINUTES = 1440;
+const MAX_CONNECTION_MINUTES_LIMIT = 1440;
 
 const port = Number(process.env.PORT || 8740);
 
@@ -33,10 +34,10 @@ const maxConnectionMinutes = Number(process.env.MAX_CONNECTION_MINUTES || 30);
 if (
   !Number.isInteger(maxConnectionMinutes) ||
   maxConnectionMinutes < 1 ||
-  maxConnectionMinutes > MAX_CONNECTION_MINUTES
+  maxConnectionMinutes > MAX_CONNECTION_MINUTES_LIMIT
 ) {
   console.error(
-    `MAX_CONNECTION_MINUTES must be a whole number from 1 to ${MAX_CONNECTION_MINUTES}`,
+    `MAX_CONNECTION_MINUTES must be a whole number from 1 to ${MAX_CONNECTION_MINUTES_LIMIT}`,
   );
   process.exit(1);
 }
@@ -50,7 +51,7 @@ let openStream: OpenStream;
 try {
   openStream = createProvider(process.env);
 } catch (err) {
-  console.error(err instanceof Error ? err.message : String(err));
+  console.error(errorMessage(err));
   process.exit(1);
 }
 

@@ -59,14 +59,18 @@ async function open(t: TestContext) {
   return { deepgram, recorded, stream };
 }
 
+// The query parameters of a request URL the fake server received.
+function params(url: string | undefined) {
+  return new URL(url ?? "", "ws://localhost").searchParams;
+}
+
 test("connects with the parameters and the API key", async (t) => {
   const { deepgram } = await open(t);
 
   const { request } = await deepgram.connection;
-  const params = new URL(request.url ?? "", "ws://localhost").searchParams;
 
   assert.equal(request.headers.authorization, "Token key");
-  assert.deepEqual(Object.fromEntries(params), {
+  assert.deepEqual(Object.fromEntries(params(request.url)), {
     model: "model",
     encoding: "linear16",
     sample_rate: "16000",
@@ -84,12 +88,7 @@ test("does not opt out of the Model Improvement Program when opted in", async (t
 
   const { request } = await deepgram.connection;
 
-  assert.equal(
-    new URL(request.url ?? "", "ws://localhost").searchParams.has(
-      "mip_opt_out",
-    ),
-    false,
-  );
+  assert.equal(params(request.url).has("mip_opt_out"), false);
 });
 
 test("fails the open when Deepgram refuses the connection", async (t) => {
@@ -101,9 +100,7 @@ test("fails the open when Deepgram refuses the connection", async (t) => {
 
 // The language parameter of each request the fake server received.
 function languages(deepgram: { requests: string[] }) {
-  return deepgram.requests.map((url) =>
-    new URL(url, "ws://localhost").searchParams.get("language"),
-  );
+  return deepgram.requests.map((url) => params(url).get("language"));
 }
 
 test("sends lang as the language", async (t) => {
